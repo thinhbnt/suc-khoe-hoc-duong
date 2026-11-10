@@ -1,5 +1,13 @@
 // sw.js (Service Worker lưu cache tĩnh)
-const CACHE_NAME = "health-pwa-v1";
+//
+// ⚠️ QUY TẮC BẮT BUỘC KHI SỬA CODE:
+// Mỗi khi thay đổi bất kỳ file nào nằm trong danh sách ASSETS bên dưới
+// (index.html, nutritionEngine.js, storage.js, manifest.json, ...), PHẢI tăng
+// CACHE_NAME lên v(N+1) — ví dụ: "health-pwa-v2" -> "health-pwa-v3".
+// Lý do: Service Worker này không có bước "activate" + skipWaiting (giữ đúng
+// kiến trúc trong tài liệu), nên trình duyệt KHÔNG tự xoá cache cũ. Nếu giữ
+// nguyên tên cache, người đã cài app sẽ tiếp tục chạy bản code cũ.
+const CACHE_NAME = "health-pwa-v2";
 const ASSETS = [
   "./",
   "./index.html",

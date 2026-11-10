@@ -24,6 +24,10 @@
     <h2>Thông Số Thể Trạng</h2>
     <form id="healthForm">
       <div class="field">
+        <label>Tên/Biệt danh của bạn:</label>
+        <input type="text" id="name" maxlength="30" placeholder="Ví dụ: Thịnh, Minh" autocomplete="nickname">
+      </div>
+      <div class="field">
         <label>Giới tính:</label>
         <select id="gender"><option value="male">Nam</option><option value="female">Nữ</option></select>
       </div>
@@ -93,6 +97,7 @@
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const payload = {
+        name: document.getElementById('name').value.trim(),
         gender: document.getElementById('gender').value,
         age: parseInt(document.getElementById('age').value, 10),
         height: parseFloat(document.getElementById('height').value),
