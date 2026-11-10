@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sức Khỏe Học Đường</title>
+  <title>Khuyến Nghị Dinh Dưỡng</title>
+  <link rel="manifest" href="manifest.json">
   <style>
     body { font-family: system-ui, -apple-system, sans-serif; margin: 16px; background: #f8fafc; color: #1e293b; }
     .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); max-width: 480px; margin: 0 auto 16px; }
@@ -11,6 +12,7 @@
     label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 4px; }
     input, select { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 15px; }
     button { width: 100%; padding: 10px; background: #10b981; color: white; border: none; border-radius: 4px; font-size: 16px; font-weight: 600; cursor: pointer; }
+    button.secondary { background: #64748b; margin-top: 8px; }
     .result-box { background: #f0fdf4; border: 1px solid #bbf7d0; padding: 12px; border-radius: 6px; margin-top: 16px; display: none; }
     .warning-box { background: #fffbeb; border: 1px solid #fef3c7; color: #b45309; padding: 8px; border-radius: 4px; font-size: 13px; margin-top: 8px; }
     .disclaimer { font-size: 12px; color: #64748b; margin-top: 12px; border-top: 1px solid #e2e8f0; padding-top: 8px; }
@@ -65,71 +67,66 @@
       <p><strong>Calo mục tiêu đề xuất:</strong> <span id="outTarget" style="font-size: 1.2em; color: #047857; font-weight: bold;"></span> kcal/ngày</p>
       <div id="warningArea"></div>
       <div class="disclaimer">
-        * <strong>Lưu ý:</strong> Kết quả chỉ mang tính tham khảo dành cho người khỏe mạnh. Người có bệnh nền hoặc đang điều trị y khoa cần tham vấn ý kiến bác sĩ.
+        * <strong>Lưu ý:</strong> Kết quả chỉ mang tính tham khảo dành cho người khỏe mạnh. Người có bệnh nền, rối loạn chuyển hóa hoặc đang điều trị y khoa cần tham vấn ý kiến chuyên gia dinh dưỡng.
       </div>
     </div>
   </div>
 
-  <script>
+  <div class="card">
+    <h3>Quản Lý Dữ Liệu Cục Bộ (Private)</h3>
+    <p style="font-size: 13px; color: #64748b;">Toàn bộ dữ liệu chỉ lưu trên máy bạn, không gửi qua máy chủ trung gian.</p>
+    <button type="button" class="secondary" id="btnExport">Sao lưu ra file JSON</button>
+    <input type="file" id="fileImport" style="display: none;" accept=".json">
+    <button type="button" class="secondary" onclick="document.getElementById('fileImport').click()">Phục hồi từ file JSON</button>
+  </div>
+
+  <script type="module">
+    import { calculateMetrics } from './nutritionEngine.js';
+    import { saveRecord, exportDataToJSON, importDataFromJSON } from './storage.js';
+
+    // Đăng ký Service Worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js').catch(console.error);
+    }
+
     const form = document.getElementById('healthForm');
-    form.addEventListener('submit', (e) => {
+    form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const gender = document.getElementById('gender').value;
-      const age = parseInt(document.getElementById('age').value, 10);
-      const height = parseFloat(document.getElementById('height').value);
-      const weight = parseFloat(document.getElementById('weight').value);
-      const activity = document.getElementById('activityLevel').value;
-      const goal = document.getElementById('goal').value;
+      const payload = {
+        gender: document.getElementById('gender').value,
+        age: parseInt(document.getElementById('age').value, 10),
+        height: parseFloat(document.getElementById('height').value),
+        weight: parseFloat(document.getElementById('weight').value),
+        activityLevel: document.getElementById('activityLevel').value,
+        goal: document.getElementById('goal').value
+      };
 
-      // 1. BMI (WHO Châu Á - Thái Bình Dương)
-      const heightM = height / 100;
-      const bmi = +(weight / (heightM * heightM)).toFixed(1);
-      let bmiCat = "";
-      if (bmi < 18.5) bmiCat = "Thiếu cân";
-      else if (bmi < 23.0) bmiCat = "Bình thường";
-      else if (bmi < 25.0) bmiCat = "Tiền béo phì (Thừa cân)";
-      else if (bmi < 30.0) bmiCat = "Béo phì độ I";
-      else bmiCat = "Béo phì độ II";
+      try {
+        const res = calculateMetrics(payload);
+        document.getElementById('outBmi').innerText = res.bmi;
+        document.getElementById('outBmiCat').innerText = res.bmiCategory;
+        document.getElementById('outBmr').innerText = res.bmr;
+        document.getElementById('outTdee').innerText = res.tdee;
+        document.getElementById('outTarget').innerText = res.targetCalories;
 
-      // 2. BMR (Mifflin-St Jeor)
-      const s = gender === 'male' ? 5 : -161;
-      const bmr = Math.round(10 * weight + 6.25 * height - 5 * age + s);
+        const warnDiv = document.getElementById('warningArea');
+        warnDiv.innerHTML = res.warnings.map(w => `<div class="warning-box">${w}</div>`).join('');
+        document.getElementById('resultBox').style.display = 'block';
 
-      // 3. TDEE
-      const mults = { sedentary: 1.2, light: 1.375, moderate: 1.55, very_active: 1.725 };
-      const tdee = Math.round(bmr * mults[activity]);
-
-      // 4. Calo mục tiêu & Safety Guardrails
-      let target = tdee;
-      if (goal === 'lose') target -= 500;
-      if (goal === 'gain') target += 500;
-
-      const warnings = [];
-      if (age < 18) {
-        warnings.push("Học sinh dưới 18 tuổi đang tuổi phát triển, khuyến nghị không ăn thâm hụt calo.");
-        if (goal === 'lose') target = tdee;
+        // Lưu vào IndexedDB
+        await saveRecord({ ...payload, ...res });
+      } catch (err) {
+        alert(err.message);
       }
-      if (bmi < 18.5 && goal === 'lose') {
-        warnings.push("Thể trạng đang thiếu cân, hệ thống đã khóa mục tiêu giảm cân.");
-        target = tdee;
-      }
-
-      const minFloor = gender === 'male' ? 1500 : 1200;
-      if (target < minFloor) {
-        target = minFloor;
-        warnings.push(`Đã điều chỉnh về ngưỡng tối thiểu an toàn sinh học (${minFloor} kcal).`);
-      }
-
-      document.getElementById('outBmi').innerText = bmi;
-      document.getElementById('outBmiCat').innerText = bmiCat;
-      document.getElementById('outBmr').innerText = bmr;
-      document.getElementById('outTdee').innerText = tdee;
-      document.getElementById('outTarget').innerText = target;
-
-      const warnDiv = document.getElementById('warningArea');
-      warnDiv.innerHTML = warnings.map(w => `<div class="warning-box">${w}</div>`).join('');
-      document.getElementById('resultBox').style.display = 'block';
     });
+
+    document.getElementById('btnExport').onclick = exportDataToJSON;
+    document.getElementById('fileImport').onchange = async (e) => {
+      if (e.target.files.length > 0) {
+        await importDataFromJSON(e.target.files[0]);
+        alert("Khôi phục dữ liệu thành công!");
+      }
+    };
   </script>
 </body>
 </html>
