@@ -304,7 +304,8 @@ Quy trình chuẩn:
 
 ```bash
 # 1. Sửa code
-# 2. Tăng CACHE_NAME trong sw.js
+# 2. Tăng số phiên bản ở 3 chỗ: CACHE_NAME (sw.js) + EXPECTED_CACHE và meta
+#    app-version / app-build (index.html)
 # 3. Chạy test
 python -m unittest discover -s tests -v
 # 4. Commit & deploy
