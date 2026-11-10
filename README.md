@@ -13,19 +13,22 @@ Toàn bộ thuật toán chạy **100% trên máy người dùng** (client-side)
 | Tính năng | Mô tả |
 | --- | --- |
 | Chỉ số BMI | Phân loại theo chuẩn WHO châu Á – Thái Bình Dương (WHO WPRO) |
+| BMI theo tuổi | Với 10–19 tuổi: **z-score + bách phân vị** theo WHO Growth Reference 2007 (5 nhóm chuẩn thiếu niên) |
 | Chỉ số BMR | Công thức Mifflin–St Jeor |
 | Chỉ số TDEE | `BMR × hệ số vận động` (1.2 / 1.375 / 1.55 / 1.725) |
 | Calo mục tiêu | `TDEE ± 500 kcal` theo mục tiêu Giảm / Duy trì / Tăng |
 | Rào chắn an toàn | Khoá thâm hụt calo với người dưới 18 tuổi và người thiếu cân; áp sàn calo sinh học |
 | Hồ sơ cục bộ | Ô **Tên/Biệt danh của bạn**; mỗi lần bấm tính lưu một bản ghi vào IndexedDB |
+| Lịch sử & biểu đồ | Danh sách các lần đo đã lưu + biểu đồ SVG xu hướng BMI (vẽ tay, không dùng thư viện) |
+| Xoá dữ liệu | Xoá từng lần đo hoặc xoá toàn bộ ngay trong app (bấm 2 lần để tránh nhầm) |
 | Gợi ý khẩu phần | Chia calo mục tiêu theo tỷ lệ bữa **30 / 40 / 30** và gợi ý món Việt cụ thể cho từng bữa |
 | Khuyến cáo vận động | Theo nhóm tuổi (dưới 18 / 18–64 / từ 65), tham khảo WHO 2020 |
 | Sao lưu / Phục hồi | Xuất toàn bộ dữ liệu ra file `.json` và nhập lại từ file |
 | Chạy offline | Service Worker cache tĩnh; cài được lên màn hình chính (chế độ `standalone`) |
+| Thân thiện | Tự chuyển giao diện tối theo cài đặt máy; lỗi nhập liệu hiện ngay trong form thay vì `alert()`; `aria-live` / `role` cho trình đọc màn hình |
 
-Ứng dụng **không** có (ngoài phạm vi MVP): đăng ký/đăng nhập, nhập bệnh lý, đồng bộ máy chủ,
-thực đơn cá nhân hoá theo bệnh lý/dị ứng, xem lại lịch sử trên giao diện
-(dữ liệu vẫn được lưu, xem qua file sao lưu).
+Ứng dụng **không** có (ngoài phạm vi): đăng ký/đăng nhập, nhập bệnh lý, đồng bộ máy chủ,
+thực đơn cá nhân hoá theo bệnh lý/dị ứng/ngân sách, nhật ký ăn uống hằng ngày.
 
 ---
 
@@ -102,23 +105,61 @@ Mọi món đều được chọn sao cho **tổng ≤ ngân sách bữa**; ph�
 
 Khuyến cáo này **độc lập** với dropdown "Mức độ vận động" — dropdown chỉ dùng để nhân hệ số TDEE.
 
+### 2.7. BMI theo tuổi — WHO Growth Reference 2007 (10–19 tuổi)
+
+Ngưỡng BMI tuyệt đối ở §2.1 là chuẩn cho **người trưởng thành**. Trẻ đang lớn có BMI trung bình
+thay đổi theo từng tuổi và giới, nên WHO khuyến nghị so **theo tuổi** bằng z-score / bách phân vị
+thay vì so với một con số cố định. Vì vậy với tuổi **10–19**, app hiển thị thêm ô "Phân loại theo tuổi".
+
+**Dữ liệu:** bảng LMS (L, M, S) của WHO, trích tháng tuổi 120–229 cho nam và nữ, lấy từ kho chính
+thức <https://github.com/WorldHealthOrganization/anthroplus>
+(`data-raw/growthstandards/bfawho2007.txt`).
+
+**Công thức:**
+
+- `z = ((BMI / M)^L − 1) / (L × S)`
+- Ngoài khoảng ±3 SD, dùng đúng cách WHO hiệu chỉnh (nội suy tuyến tính theo khoảng cách SD2–SD3),
+  nhờ vậy kết quả trùng khớp 100 % với phần mềm WHO AnthroPlus (919/919 ca kiểm chứng).
+- Bách phân vị = `Φ(z) × 100` (xấp xỉ hàm phân phối chuẩn, Abramowitz & Stegun 7.1.26).
+
+| z-score | Nhóm |
+| --- | --- |
+| < −3 | Gầy nặng |
+| −3 … < −2 | Gầy |
+| −2 … +1 | Bình thường |
+| > +1 … +2 | Thừa cân |
+| > +2 | Béo phì |
+
+**Ví dụ:** nam 16 tuổi, 70 kg / 170 cm → BMI 24.2
+
+- Theo người lớn (WPRO): *Tiền béo phì (Thừa cân)*
+- Theo tuổi (WHO 2007): z = **1.18**, bách phân vị **88.2** → *Thừa cân*; trung vị BMI của nam 16 tuổi là 20.5 kg/m²
+
+Hai cách phân loại hiển thị **song song** để thấy rõ khác biệt; từ 18 tuổi app ghi chú thêm rằng
+ngưỡng người lớn được dùng để tham khảo song song. Ngoài khoảng 10–19 tuổi, ô này tự ẩn.
+
 ---
 
 ## 3. Cấu trúc dự án
 
 ```
 suc-khoe-hoc-duong/
-├── index.html                      # Toàn bộ UI (form, kết quả, gợi ý khẩu phần, card sao lưu) + script type="module"
+├── index.html                      # UI (form, kết quả, BMI theo tuổi, gợi ý khẩu phần, lịch sử, sao lưu) + script type="module"
 ├── nutritionEngine.js              # Thuật toán BMI / BMR / TDEE / rào chắn an toàn / chia bữa 30-40-30
+├── bmiForAge.js                    # z-score & bách phân vị BMI theo tuổi — bảng LMS WHO 2007 (10-19 tuổi)
 ├── recommendations.js              # Gợi ý khẩu phần theo ngân sách bữa + khuyến cáo vận động theo tuổi
 ├── foods.json                      # Dữ liệu 35 món Việt (kcal / khẩu phần / nhóm / bữa phù hợp)
-├── storage.js                      # IndexedDB + Sao lưu / Phục hồi JSON
+├── storage.js                      # IndexedDB + xoá bản ghi + Sao lưu / Phục hồi JSON
 ├── sw.js                           # Service Worker cache tĩnh (chạy offline)
 ├── manifest.json                   # Khai báo PWA (tên, icon, standalone, theme color)
 ├── icon-192.png , icon-512.png     # Icon PWA (bắt buộc để cài lên màn hình chính)
 ├── tests/
 │   ├── test_nutrition_reference.py # Bộ test tham chiếu (Python) — 3 case vàng BMI/BMR/TDEE
-│   └── test_food_data.py           # Test dữ liệu foods.json + tỷ lệ chia bữa 30/40/30
+│   ├── test_food_data.py           # Test dữ liệu foods.json + tỷ lệ chia bữa 30/40/30
+│   ├── test_bmi_for_age.py         # Test bảng LMS + z-score khớp dữ liệu WHO 2007
+│   └── fixtures/
+│       ├── bfawho2007.txt          # Bảng LMS gốc của WHO (nguyên văn, 340 dòng)
+│       └── who2007_zbmi_sample.csv # 12 ca (BMI, tuổi tháng, z) do WHO AnthroPlus tính
 ├── .gitignore
 └── README.md
 ```
@@ -137,9 +178,15 @@ Không dùng thư viện ngoài, không cần `npm install`, không cần bướ
 | `recommendations.js` | `loadFoods()` | `fetch('./foods.json')` và cache trong bộ nhớ |
 | | `buildMealPlan(mealKey, budgetKcal, foods)` | Trả `{ meal, budgetKcal, items[], totalKcal, remainingKcal }` |
 | | `getActivityAdvice(age)` | Trả `{ group, headline, details[], source }` hoặc `null` nếu tuổi ngoài 10–100 |
+| `bmiForAge.js` | `LMS_BMI_FOR_AGE`, `WHO_BMI_CATEGORIES`, `WHO_BMI_REFERENCE` | Bảng LMS WHO 2007 (tháng 120–229) và 5 nhóm phân loại |
+| | `bmiForAge(bmi, ageYears, gender)` | `{ z, percentile, medianBmi, category, reference, ageMonths }`; `null` nếu tuổi ngoài 10–19 |
+| | `whoAdjustedZScore(value, lms)` | z-score đã hiệu chỉnh ngoài ±3SD (đúng như WHO AnthroPlus) |
+| | `normalCdf(z)`, `classifyWhoBmi(z)`, `valueAtZ(lms, z)`, `zFromValue(value, lms)` | Hàm phụ trợ, có thể test độc lập |
 | `storage.js` | `initDB()` | Mở/tạo DB `HealthyAppLocalDB`, xin quyền lưu trữ bền vững |
 | | `saveRecord(record)` | Thêm 1 bản ghi |
 | | `getAllRecords()` | Lấy toàn bộ bản ghi |
+| | `deleteRecord(id)` | Xoá 1 bản ghi |
+| | `clearAllRecords()` | Xoá toàn bộ bản ghi trên thiết bị |
 | | `exportDataToJSON()` | Tải file `suckhoe_backup_YYYY-MM-DD.json` |
 | | `importDataFromJSON(file)` | Đọc file JSON và ghi vào DB |
 
@@ -201,15 +248,19 @@ python -m unittest discover -s tests -v
 # hoặc chạy từng file:
 python tests/test_nutrition_reference.py -v
 python tests/test_food_data.py -v
+python -m unittest discover -s tests -p "test_bmi_for_age.py" -v
 ```
 
-Kết quả mong đợi: `Ran 8 tests ... OK`.
+Kết quả mong đợi: `Ran 13 tests ... OK`.
 
 - `test_nutrition_reference.py` đối chiếu **3 case vàng** BMI/BMR/TDEE — nếu sửa công thức trong
   `nutritionEngine.js` mà làm lệch một trong các giá trị bên dưới thì test sẽ báo lỗi.
 - `test_food_data.py` kiểm tra `foods.json` (schema, `id` không trùng, ≥ 30 món, mỗi bữa đủ nhóm
   tinh bột / đạm / rau quả), tỷ lệ chia bữa 30/40/30 và việc luôn ghép được khẩu phần nằm trong
   ngân sách calo của từng bữa.
+- `test_bmi_for_age.py` so bảng LMS nhúng trong `bmiForAge.js` với **bảng gốc của WHO** (khớp từng
+  con số, tháng 120–229) và so z-score với **12 ca do WHO AnthroPlus tính** (dung sai 0.01), kèm
+  kiểm tra ranh giới 5 nhóm và bách phân vị.
 
 | Case | Ghi chú | BMI | BMR | TDEE | Calo mục tiêu |
 | --- | --- | --- | --- | --- | --- |
@@ -224,11 +275,12 @@ Kết quả mong đợi: `Ran 8 tests ... OK`.
 Service Worker trong dự án **cố tình không dùng** `self.skipWaiting()` / sự kiện `activate`
 (giữ đúng kiến trúc tối giản của tài liệu). Hệ quả:
 
-> **Mỗi lần sửa `index.html`, `nutritionEngine.js`, `recommendations.js`, `storage.js`,
-> `foods.json`, `manifest.json` hoặc thay icon → BẮT BUỘC tăng `CACHE_NAME` trong `sw.js`.**
+> **Mỗi lần sửa `index.html`, `nutritionEngine.js`, `bmiForAge.js`, `recommendations.js`,
+> `storage.js`, `foods.json`, `manifest.json` hoặc thay icon → BẮT BUỘC tăng `CACHE_NAME`
+> trong `sw.js`.**
 >
 > ```js
-> const CACHE_NAME = "health-pwa-v3";   // đổi thành "health-pwa-v4", "health-pwa-v5", ...
+> const CACHE_NAME = "health-pwa-v4";   // đổi thành "health-pwa-v5", "health-pwa-v6", ...
 > ```
 
 Nếu quên bước này, người đã cài app sẽ **tiếp tục chạy bản code cũ** (vì `fetch` trả cache trước).
@@ -250,7 +302,11 @@ git push origin main        # GitHub Pages tự build lại trong ~1 phút
 
 ---
 
-## 8. Sao lưu & phục hồi dữ liệu
+## 8. Lịch sử, sao lưu & phục hồi dữ liệu
+
+- **Lịch sử theo dõi** (card ngay dưới phần gợi ý khẩu phần): liệt kê mọi lần đo đã lưu (mới nhất ở
+  trên) kèm nhóm BMI theo tuổi, biểu đồ SVG xu hướng BMI (cần ≥ 2 lần đo) và nút xoá từng dòng /
+  xoá toàn bộ. Lịch sử được vẽ lại tự động sau mỗi lần tính, sau khi xoá và sau khi phục hồi file.
 
 - **Sao lưu ra file JSON**: tải về `suckhoe_backup_YYYY-MM-DD.json` chứa toàn bộ bản ghi
   (`name`, `gender`, `age`, `height`, `weight`, `activityLevel`, `goal`, `bmi`, `bmiCategory`,
@@ -270,8 +326,9 @@ git push origin main        # GitHub Pages tự build lại trong ~1 phút
 - `navigator.storage.persist()` được gọi để xin quyền lưu trữ bền vững, giảm nguy cơ hệ điều hành
   tự xoá dữ liệu khi máy hết dung lượng.
 - Phù hợp tinh thần **Privacy by Design** và Nghị định 13/2023/NĐ-CP về bảo vệ dữ liệu cá nhân.
-- Xoá dữ liệu: xoá dữ liệu trang trong trình duyệt (Settings → Site data) hoặc gỡ app khỏi
-  màn hình chính rồi xoá dữ liệu trang.
+- Xoá dữ liệu: nút **Xoá** trên từng lần đo trong mục *Lịch sử theo dõi*, hoặc **Xoá toàn bộ lịch
+  sử** (bấm 2 lần để xác nhận, tránh nhầm) — đáp ứng quyền xoá dữ liệu của chủ thể dữ liệu. Cách
+  khác: xoá dữ liệu trang trong trình duyệt (Settings → Site data) hoặc gỡ app khỏi màn hình chính.
 
 ---
 
@@ -298,6 +355,10 @@ Gợi ý khẩu phần chỉ là **ví dụ minh hoạ** dựa trên 35 món Vi�
 (năng lượng làm tròn, không tính đến dị ứng, bệnh nền, tôn giáo hay điều kiện kinh tế).
 Khuyến cáo vận động trích theo WHO 2020 và cần được điều chỉnh bởi giáo viên thể chất /
 nhân viên y tế nhà trường khi áp dụng thực tế.
+
+Phân loại **BMI theo tuổi** (WHO 2007) là công cụ **sàng lọc cộng đồng**, không phải chẩn đoán:
+học sinh có z-score dưới −2 hoặc trên +2 SD nên được nhân viên y tế nhà trường đánh giá thêm
+(không tự ý ăn kiêng theo app).
 
 
 

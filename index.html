@@ -6,11 +6,21 @@
   <title>Khuyến Nghị Dinh Dưỡng</title>
   <link rel="manifest" href="manifest.json">
   <style>
-    body { font-family: system-ui, -apple-system, sans-serif; margin: 16px; background: #f8fafc; color: #1e293b; }
-    .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); max-width: 480px; margin: 0 auto 16px; }
+    :root { --bg: #f8fafc; --card: #ffffff; --text: #1e293b; --muted: #64748b; --border: #e2e8f0; --field: #ffffff; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #0f172a; --card: #1e293b; --text: #e2e8f0; --muted: #94a3b8; --border: #334155; --field: #0f172a; }
+      .result-box { background: #052e16; border-color: #166534; }
+      .advice-box { background: #0b1a33; border-color: #1e3a8a; }
+      .warning-box { background: #2b1e05; border-color: #78350f; color: #fcd34d; }
+      .error-box { background: #2b0b0b; border-color: #7f1d1d; color: #fca5a5; }
+      .meal-total { color: #34d399; }
+    }
+    body { font-family: system-ui, -apple-system, sans-serif; margin: 16px; background: var(--bg); color: var(--text); }
+    .card { background: var(--card); padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); max-width: 480px; margin: 0 auto 16px; }
     .field { margin-bottom: 12px; }
     label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 4px; }
-    input, select { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 15px; }
+    input, select { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid var(--border); border-radius: 4px; font-size: 15px; background: var(--field); color: var(--text); }
+    input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid #10b981; outline-offset: 1px; }
     button { width: 100%; padding: 10px; background: #10b981; color: white; border: none; border-radius: 4px; font-size: 16px; font-weight: 600; cursor: pointer; }
     button.secondary { background: #64748b; margin-top: 8px; }
     .result-box { background: #f0fdf4; border: 1px solid #bbf7d0; padding: 12px; border-radius: 6px; margin-top: 16px; display: none; }
@@ -24,35 +34,52 @@
     .meal-note { font-size: 12px; color: #b45309; margin-top: 4px; }
     .advice-box { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 10px; font-size: 14px; }
     .advice-box ul { margin: 6px 0 0; padding-left: 18px; }
+    .error-box { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; padding: 8px; border-radius: 4px; font-size: 13px; margin-top: 8px; display: none; }
+    .bmi-age-box { border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin-top: 12px; font-size: 14px; display: none; }
+    .bmi-scale-wrap { position: relative; margin: 10px 0 6px; padding-top: 2px; }
+    .bmi-scale { display: flex; height: 10px; border-radius: 5px; overflow: hidden; }
+    .bmi-scale span { display: block; }
+    .bmi-marker { position: absolute; top: 0; width: 3px; height: 16px; background: var(--text); border-radius: 2px; transform: translateX(-50%); }
+    .bmi-legend { display: flex; flex-wrap: wrap; gap: 8px; font-size: 11px; color: var(--muted); }
+    .bmi-legend span { display: inline-flex; align-items: center; gap: 4px; }
+    .bmi-legend i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .history-list { list-style: none; margin: 0; padding: 0; }
+    .history-item { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; font-size: 14px; }
+    .history-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .btn-del { width: auto; padding: 4px 10px; font-size: 12px; background: #ef4444; border-radius: 4px; flex: 0 0 auto; }
+    .chart-svg { width: 100%; height: auto; display: block; color: var(--text); }
+    .chart-empty, .status-text { font-size: 13px; color: var(--muted); }
+    .status-text { margin-top: 8px; display: none; }
+    @media (max-width: 360px) { .history-item { flex-direction: column; } .btn-del { width: 100%; } }
   </style>
 </head>
 <body>
 
   <div class="card">
     <h2>Thông Số Thể Trạng</h2>
-    <form id="healthForm">
+    <form id="healthForm" novalidate>
       <div class="field">
-        <label>Tên/Biệt danh của bạn:</label>
+        <label for="name">Tên/Biệt danh của bạn:</label>
         <input type="text" id="name" maxlength="30" placeholder="Ví dụ: Thịnh, Minh" autocomplete="nickname">
       </div>
       <div class="field">
-        <label>Giới tính:</label>
+        <label for="gender">Giới tính:</label>
         <select id="gender"><option value="male">Nam</option><option value="female">Nữ</option></select>
       </div>
       <div class="field">
-        <label>Tuổi:</label>
+        <label for="age">Tuổi:</label>
         <input type="number" id="age" value="16" min="10" max="100" required>
       </div>
       <div class="field">
-        <label>Chiều cao (cm):</label>
+        <label for="height">Chiều cao (cm):</label>
         <input type="number" id="height" value="165" min="100" max="250" required>
       </div>
       <div class="field">
-        <label>Cân nặng (kg):</label>
+        <label for="weight">Cân nặng (kg):</label>
         <input type="number" id="weight" value="55" min="20" max="300" step="0.5" required>
       </div>
       <div class="field">
-        <label>Mức độ vận động:</label>
+        <label for="activityLevel">Mức độ vận động:</label>
         <select id="activityLevel">
           <option value="sedentary">Ít vận động (Ngồi nhiều, học tập)</option>
           <option value="light" selected>Vận động nhẹ (Thể dục 1-3 ngày/tuần)</option>
@@ -61,7 +88,7 @@
         </select>
       </div>
       <div class="field">
-        <label>Mục tiêu:</label>
+        <label for="goal">Mục tiêu:</label>
         <select id="goal">
           <option value="maintain">Duy trì thể trạng</option>
           <option value="lose">Giảm cân an toàn</option>
@@ -69,11 +96,13 @@
         </select>
       </div>
       <button type="submit">Tính Toán Chỉ Số</button>
+      <div id="formError" class="error-box" role="alert"></div>
     </form>
 
-    <div id="resultBox" class="result-box">
+    <div id="resultBox" class="result-box" aria-live="polite">
       <h3>Kết Quả Tính Toán</h3>
       <p><strong>BMI:</strong> <span id="outBmi"></span> (<span id="outBmiCat"></span>)</p>
+      <div id="bmiAgeBox" class="bmi-age-box"></div>
       <p><strong>BMR:</strong> <span id="outBmr"></span> kcal/ngày</p>
       <p><strong>TDEE:</strong> <span id="outTdee"></span> kcal/ngày</p>
       <p><strong>Calo mục tiêu đề xuất:</strong> <span id="outTarget" style="font-size: 1.2em; color: #047857; font-weight: bold;"></span> kcal/ngày</p>
@@ -100,18 +129,28 @@
     </div>
   </div>
 
+  <div id="historyCard" class="card" style="display: none;">
+    <h3>Lịch Sử Theo Dõi</h3>
+    <p id="historySummary" class="chart-empty" style="margin-top: -4px;"></p>
+    <div id="historyChartArea"></div>
+    <ul id="historyList" class="history-list" aria-label="Danh sách các lần đo đã lưu"></ul>
+    <button type="button" class="secondary" id="btnClearAll">Xoá toàn bộ lịch sử</button>
+  </div>
+
   <div class="card">
     <h3>Quản Lý Dữ Liệu Cục Bộ (Private)</h3>
     <p style="font-size: 13px; color: #64748b;">Toàn bộ dữ liệu chỉ lưu trên máy bạn, không gửi qua máy chủ trung gian.</p>
     <button type="button" class="secondary" id="btnExport">Sao lưu ra file JSON</button>
     <input type="file" id="fileImport" style="display: none;" accept=".json">
     <button type="button" class="secondary" onclick="document.getElementById('fileImport').click()">Phục hồi từ file JSON</button>
+    <div id="dataStatus" class="status-text" role="status"></div>
   </div>
 
   <script type="module">
     import { calculateMetrics, splitMeals, MEAL_LABELS } from './nutritionEngine.js';
-    import { saveRecord, exportDataToJSON, importDataFromJSON } from './storage.js';
+    import { saveRecord, getAllRecords, deleteRecord, clearAllRecords, exportDataToJSON, importDataFromJSON } from './storage.js';
     import { loadFoods, buildMealPlan, getActivityAdvice } from './recommendations.js';
+    import { bmiForAge, WHO_BMI_CATEGORIES } from './bmiForAge.js';
 
     // Đăng ký Service Worker
     if ('serviceWorker' in navigator) {
@@ -160,6 +199,135 @@
       planCard.style.display = 'block';
     }
 
+    // ---------- Tiện ích hiển thị ----------
+    function escapeHtml(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function formatDateTime(iso) {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return 'Không rõ thời gian';
+      return d.toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+
+    function formatShortDate(iso) {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return '?';
+      return `${d.getDate()}/${d.getMonth() + 1}`;
+    }
+
+    function setStatus(message) {
+      const el = document.getElementById('dataStatus');
+      el.textContent = message || '';
+      el.style.display = message ? 'block' : 'none';
+    }
+
+    // ---------- Phân loại BMI theo tuổi: WHO 2007 (10-19 tuổi) ----------
+    function renderBmiForAge(bmi, age, gender) {
+      const box = document.getElementById('bmiAgeBox');
+      const info = bmiForAge(bmi, age, gender);
+      if (!info) {
+        box.innerHTML = '';
+        box.style.display = 'none';
+        return null;
+      }
+      const pctText = info.percentile > 99 ? '> 99' : info.percentile < 1 ? '< 1' : info.percentile.toFixed(1);
+      const widths = [0.14, 2.14, 81.86, 13.59, 2.28];
+      const bar = WHO_BMI_CATEGORIES
+        .map((c, i) => `<span style="flex: ${widths[i]}; background: ${c.color};" title="${c.label} (${c.range})"></span>`)
+        .join('');
+      const legend = WHO_BMI_CATEGORIES
+        .map(c => `<span><i style="background:${c.color}"></i>${c.label} (${c.range})</span>`)
+        .join('');
+      const adultNote = age >= 18
+        ? '<p style="margin: 6px 0 0; font-size: 12px; color: var(--muted);">Từ 18 tuổi, ngưỡng BMI người lớn (WPRO) ở trên được dùng song song để tham khảo.</p>'
+        : '';
+      box.innerHTML = `
+        <strong>Phân loại theo tuổi (${info.reference}):</strong>
+        <span style="color: ${info.category.color}; font-weight: 700;">${info.category.label}</span>
+        <div class="bmi-scale-wrap">
+          <div class="bmi-scale" aria-hidden="true">${bar}</div>
+          <div class="bmi-marker" style="left: ${Math.min(99, Math.max(1, info.percentile))}%;"></div>
+        </div>
+        <div class="bmi-legend">${legend}</div>
+        <p style="margin: 8px 0 0; font-size: 13px; color: var(--muted);">
+          z-score <strong>${info.z}</strong> · bách phân vị <strong>${pctText}</strong> ·
+          trung vị BMI của tuổi này: ${info.medianBmi} kg/m²
+        </p>${adultNote}`;
+      box.style.display = 'block';
+      return info;
+    }
+
+    // ---------- Lịch sử theo dõi ----------
+    function buildChartSvg(records) {
+      const w = 320, h = 120, padX = 30, padY = 16;
+      const values = records.map(r => Number(r.bmi) || 0);
+      let min = Math.min(...values), max = Math.max(...values);
+      if (max - min < 1) {
+        const mid = (max + min) / 2;
+        min = Math.max(0, mid - 0.5);
+        max = mid + 0.5;
+      }
+      const spanX = Math.max(1, values.length - 1);
+      const px = i => padX + (i / spanX) * (w - padX * 2);
+      const py = v => h - padY - ((v - min) / (max - min)) * (h - padY * 2);
+      const line = values.map((v, i) => `${i ? 'L' : 'M'}${px(i).toFixed(1)},${py(v).toFixed(1)}`).join(' ');
+      const dots = values.map((v, i) =>
+        `<circle cx="${px(i).toFixed(1)}" cy="${py(v).toFixed(1)}" r="3" fill="#10b981"><title>${records[i].bmi} kg/m²</title></circle>`
+      ).join('');
+      return `<svg class="chart-svg" viewBox="0 0 ${w} ${h}" role="img"
+          aria-label="Biểu đồ xu hướng BMI qua ${values.length} lần đo">
+        <line x1="${padX}" y1="${h - padY}" x2="${w - padX}" y2="${h - padY}" stroke="currentColor" stroke-opacity="0.25" />
+        <text x="2" y="${(py(max) + 4).toFixed(1)}" font-size="9" fill="currentColor" opacity="0.65">${max.toFixed(1)}</text>
+        <text x="2" y="${(py(min) + 4).toFixed(1)}" font-size="9" fill="currentColor" opacity="0.65">${min.toFixed(1)}</text>
+        <path d="${line}" fill="none" stroke="#10b981" stroke-width="2" stroke-linejoin="round" />
+        ${dots}
+        <text x="${padX}" y="${h - 3}" font-size="9" fill="currentColor" opacity="0.65">${formatShortDate(records[0].calculatedAt)}</text>
+        <text x="${w - padX}" y="${h - 3}" font-size="9" text-anchor="end" fill="currentColor" opacity="0.65">${formatShortDate(records[records.length - 1].calculatedAt)}</text>
+      </svg>`;
+    }
+
+    async function renderHistory() {
+      const card = document.getElementById('historyCard');
+      const listEl = document.getElementById('historyList');
+      const chartEl = document.getElementById('historyChartArea');
+      const sumEl = document.getElementById('historySummary');
+      let records = [];
+      try {
+        records = await getAllRecords();
+      } catch (err) {
+        setStatus('Không đọc được dữ liệu trên thiết bị: ' + (err.message || err));
+        return;
+      }
+      records.sort((a, b) => String(a.calculatedAt || '').localeCompare(String(b.calculatedAt || '')));
+      if (!records.length) {
+        card.style.display = 'none';
+        listEl.innerHTML = '';
+        chartEl.innerHTML = '';
+        sumEl.textContent = '';
+        return;
+      }
+      card.style.display = 'block';
+      sumEl.textContent = `${records.length} lần đo lưu trên thiết bị này (mới nhất hiển thị trên cùng).`;
+      chartEl.innerHTML = records.length >= 2
+        ? buildChartSvg(records)
+        : '<div class="chart-empty">Cần ít nhất 2 lần đo để vẽ biểu đồ xu hướng BMI.</div>';
+      listEl.innerHTML = records.slice().reverse().map(r => {
+        const who = bmiForAge(r.bmi, r.age, r.gender);
+        const cat = who ? `${who.category.label} (theo tuổi, WHO 2007)` : (r.bmiCategory || '');
+        const date = formatDateTime(r.calculatedAt);
+        return `<li class="history-item">
+          <div>
+            <strong>${escapeHtml(r.name || 'Không tên')}</strong> · BMI ${escapeHtml(r.bmi)} · ${escapeHtml(cat)}
+            <div class="history-meta">${escapeHtml(date)} · ${escapeHtml(r.age)} tuổi · ${escapeHtml(r.weight)} kg · ${escapeHtml(r.height)} cm · mục tiêu ${escapeHtml(r.targetCalories)} kcal</div>
+          </div>
+          <button type="button" class="btn-del" data-del="${escapeHtml(r.id)}" aria-label="Xoá lần đo ngày ${escapeHtml(date)}">Xoá</button>
+        </li>`;
+      }).join('');
+    }
+
     const form = document.getElementById('healthForm');
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -173,6 +341,10 @@
         goal: document.getElementById('goal').value
       };
 
+      const errorBox = document.getElementById('formError');
+      errorBox.textContent = '';
+      errorBox.style.display = 'none';
+
       try {
         const res = calculateMetrics(payload);
         document.getElementById('outBmi').innerText = res.bmi;
@@ -185,23 +357,84 @@
         warnDiv.innerHTML = res.warnings.map(w => `<div class="warning-box">${w}</div>`).join('');
         document.getElementById('resultBox').style.display = 'block';
 
+        // Phân loại BMI theo tuổi cho học sinh 10-19 tuổi (WHO 2007)
+        renderBmiForAge(res.bmi, payload.age, payload.gender);
+
         // Gợi ý khẩu phần 30/40/30 + khuyến cáo vận động
         await renderRecommendations(payload.age, res.targetCalories);
 
-        // Lưu vào IndexedDB
+        // Lưu vào IndexedDB rồi vẽ lại lịch sử
         await saveRecord({ ...payload, ...res });
+        await renderHistory();
       } catch (err) {
-        alert(err.message);
+        // Thay cho alert(): thông báo lỗi ngay trong form, có role="alert"
+        errorBox.textContent = err.message || 'Dữ liệu không hợp lệ.';
+        errorBox.style.display = 'block';
+        document.getElementById('resultBox').style.display = 'none';
+        document.getElementById('planCard').style.display = 'none';
+        document.getElementById('bmiAgeBox').style.display = 'none';
       }
     });
 
-    document.getElementById('btnExport').onclick = exportDataToJSON;
-    document.getElementById('fileImport').onchange = async (e) => {
-      if (e.target.files.length > 0) {
-        await importDataFromJSON(e.target.files[0]);
-        alert("Khôi phục dữ liệu thành công!");
+    // Xoá 1 lần đo (uỷ quyền sự kiện cho danh sách lịch sử)
+    document.getElementById('historyList').addEventListener('click', async (e) => {
+      const btn = e.target.closest('button[data-del]');
+      if (!btn) return;
+      try {
+        await deleteRecord(Number(btn.dataset.del));
+        await renderHistory();
+        setStatus('Đã xoá 1 lần đo khỏi thiết bị này.');
+      } catch (err) {
+        setStatus('Không xoá được: ' + (err.message || err));
       }
+    });
+
+    // Xoá toàn bộ: bấm 2 lần (tránh hộp thoại confirm() chặn trên di động)
+    let clearArmed = false;
+    let clearTimer = null;
+    const btnClearAll = document.getElementById('btnClearAll');
+    function resetClearButton() {
+      clearArmed = false;
+      clearTimeout(clearTimer);
+      btnClearAll.textContent = 'Xoá toàn bộ lịch sử';
+      delete btnClearAll.dataset.armed;
+    }
+    btnClearAll.addEventListener('click', async () => {
+      if (!clearArmed) {
+        clearArmed = true;
+        btnClearAll.dataset.armed = 'true';
+        btnClearAll.textContent = 'Bấm lần nữa để xoá hết (không khôi phục được)';
+        clearTimer = setTimeout(resetClearButton, 5000);
+        return;
+      }
+      try {
+        await clearAllRecords();
+        setStatus('Đã xoá toàn bộ lịch sử trên thiết bị này.');
+      } catch (err) {
+        setStatus('Không xoá được: ' + (err.message || err));
+      }
+      resetClearButton();
+      await renderHistory();
+    });
+
+    document.getElementById('btnExport').onclick = async () => {
+      await exportDataToJSON();
+      setStatus('Đã tạo file sao lưu JSON (thư mục tải xuống của thiết bị).');
     };
+    document.getElementById('fileImport').onchange = async (e) => {
+      if (!e.target.files.length) return;
+      try {
+        await importDataFromJSON(e.target.files[0]);
+        setStatus('Khôi phục dữ liệu thành công!');
+      } catch (err) {
+        setStatus('Khôi phục thất bại: ' + (err.message || err));
+      }
+      e.target.value = '';
+      await renderHistory();
+    };
+
+    // Vẽ lịch sử ngay khi mở ứng dụng (dữ liệu đã có trên thiết bị)
+    renderHistory();
   </script>
 </body>
 </html>

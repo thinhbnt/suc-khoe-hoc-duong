@@ -45,6 +45,30 @@ export async function getAllRecords() {
   });
 }
 
+// Xoá 1 bản ghi theo id (quyền xoá dữ liệu của người dùng)
+export async function deleteRecord(id) {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    const store = tx.objectStore(STORE_NAME);
+    const req = store.delete(id);
+    req.onsuccess = () => resolve(true);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+// Xoá toàn bộ bản ghi trên thiết bị
+export async function clearAllRecords() {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    const store = tx.objectStore(STORE_NAME);
+    const req = store.clear();
+    req.onsuccess = () => resolve(true);
+    req.onerror = () => reject(req.error);
+  });
+}
+
 // Xuất toàn bộ dữ liệu máy client ra file .json
 export async function exportDataToJSON() {
   const records = await getAllRecords();
