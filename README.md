@@ -26,6 +26,7 @@ Toàn bộ thuật toán chạy **100% trên máy người dùng** (client-side)
 | Sao lưu / Phục hồi | Xuất toàn bộ dữ liệu ra file `.json` và nhập lại từ file |
 | Chạy offline | Service Worker cache tĩnh; cài được lên màn hình chính (chế độ `standalone`) |
 | Thân thiện | Tự chuyển giao diện tối theo cài đặt máy; lỗi nhập liệu hiện ngay trong form thay vì `alert()`; `aria-live` / `role` cho trình đọc màn hình |
+| Phiên bản | Footer hiển thị **số phiên bản + ngày build + tên bộ nhớ đệm đang chạy**, giúp biết ngay máy đã nhận bản mới chưa (không cần xoá dữ liệu trang) |
 
 Ứng dụng **không** có (ngoài phạm vi): đăng ký/đăng nhập, nhập bệnh lý, đồng bộ máy chủ,
 thực đơn cá nhân hoá theo bệnh lý/dị ứng/ngân sách, nhật ký ăn uống hằng ngày.
@@ -157,6 +158,7 @@ suc-khoe-hoc-duong/
 │   ├── test_nutrition_reference.py # Bộ test tham chiếu (Python) — 3 case vàng BMI/BMR/TDEE
 │   ├── test_food_data.py           # Test dữ liệu foods.json + tỷ lệ chia bữa 30/40/30
 │   ├── test_bmi_for_age.py         # Test bảng LMS + z-score khớp dữ liệu WHO 2007
+│   ├── test_version_consistency.py # Test phiên bản app ↔ CACHE_NAME của Service Worker ↔ module được cache
 │   └── fixtures/
 │       ├── bfawho2007.txt          # Bảng LMS gốc của WHO (nguyên văn, 340 dòng)
 │       └── who2007_zbmi_sample.csv # 12 ca (BMI, tuổi tháng, z) do WHO AnthroPlus tính
@@ -251,7 +253,7 @@ python tests/test_food_data.py -v
 python -m unittest discover -s tests -p "test_bmi_for_age.py" -v
 ```
 
-Kết quả mong đợi: `Ran 13 tests ... OK`.
+Kết quả mong đợi: `Ran 19 tests ... OK`.
 
 - `test_nutrition_reference.py` đối chiếu **3 case vàng** BMI/BMR/TDEE — nếu sửa công thức trong
   `nutritionEngine.js` mà làm lệch một trong các giá trị bên dưới thì test sẽ báo lỗi.
@@ -261,6 +263,11 @@ Kết quả mong đợi: `Ran 13 tests ... OK`.
 - `test_bmi_for_age.py` so bảng LMS nhúng trong `bmiForAge.js` với **bảng gốc của WHO** (khớp từng
   con số, tháng 120–229) và so z-score với **12 ca do WHO AnthroPlus tính** (dung sai 0.01), kèm
   kiểm tra ranh giới 5 nhóm và bách phân vị.
+- `test_version_consistency.py` chặn 2 lỗi hay gặp khi phát hành: (1) `EXPECTED_CACHE` trong
+  `index.html` lệch `CACHE_NAME` trong `sw.js` — tức là **quên tăng cache**, người đã cài app sẽ
+  chạy mãi bản cũ; (2) một module được `import` trong `index.html` nhưng thiếu trong `ASSETS` của
+  Service Worker — app sẽ trắng trang khi mở ngoại tuyến. Test cũng kiểm tra `meta[name="app-version"]`
+  đúng định dạng semver và footer thật sự có `#appVersion` / `#swVersion`.
 
 | Case | Ghi chú | BMI | BMR | TDEE | Calo mục tiêu |
 | --- | --- | --- | --- | --- | --- |
@@ -276,12 +283,18 @@ Service Worker trong dự án **cố tình không dùng** `self.skipWaiting()` /
 (giữ đúng kiến trúc tối giản của tài liệu). Hệ quả:
 
 > **Mỗi lần sửa `index.html`, `nutritionEngine.js`, `bmiForAge.js`, `recommendations.js`,
-> `storage.js`, `foods.json`, `manifest.json` hoặc thay icon → BẮT BUỘC tăng `CACHE_NAME`
-> trong `sw.js`.**
+> `storage.js`, `foods.json`, `manifest.json` hoặc thay icon → BẮT BUỘC tăng số phiên bản ở
+> 3 chỗ đồng bộ.**
 >
 > ```js
-> const CACHE_NAME = "health-pwa-v4";   // đổi thành "health-pwa-v5", "health-pwa-v6", ...
+> const CACHE_NAME     = "health-pwa-v5";      // sw.js      → "health-pwa-v6", "health-pwa-v7", ...
+> const EXPECTED_CACHE = 'health-pwa-v5';      // index.html → phải trùng CACHE_NAME ở trên
+> <meta name="app-version" content="1.2.0">    // index.html → 1.2.1 / 1.3.0 / 2.0.0 (semver)
+> <meta name="app-build"   content="2026-11-10"><!-- index.html → ngày phát hành -->
 > ```
+>
+> `python -m unittest discover -s tests` sẽ **báo lỗi ngay** nếu hai tên cache lệch nhau —
+> đây là lưới an toàn cho quy tắc này.
 
 Nếu quên bước này, người đã cài app sẽ **tiếp tục chạy bản code cũ** (vì `fetch` trả cache trước).
 Sau khi tăng `CACHE_NAME` và deploy, người dùng cần mở app **2 lần** (lần 1 tải Service Worker
@@ -299,6 +312,24 @@ git add -A
 git commit -m "feat: ..."
 git push origin main        # GitHub Pages tự build lại trong ~1 phút
 ```
+
+### 7.1. Hiển thị phiên bản trong app
+
+Cuối trang có một dòng footer:
+
+> Phiên bản **v1.2.0** (2026-11-10)
+> Bộ nhớ đệm health-pwa-v5 — đã là bản mới nhất
+
+- Số phiên bản đọc từ `<meta name="app-version">` ⇒ chỉ cần sửa **một chỗ** trong `index.html`;
+  `meta[name="app-build"]` là ngày phát hành.
+- Dòng thứ hai đọc **tên cache thật** bằng `caches.keys()` rồi so với `EXPECTED_CACHE`:
+  - trùng nhau → *"đã là bản mới nhất"* (kèm danh sách cache cũ nếu còn sót lại);
+  - máy còn cache **cũ hơn** (chưa nhận bản mới) → chữ chuyển **màu cảnh báo**:
+    *"bản health-pwa-vN sẽ kích hoạt ở lần mở kế tiếp"* — đúng hành vi của Service Worker
+    không dùng `skipWaiting` ở mục trên;
+  - lần mở đầu tiên (chưa có cache) → *"mở lại ứng dụng một lần để bật chế độ ngoại tuyến"*.
+- Nhờ vậy không phải đoán "app đã cập nhật chưa?": mở app là thấy ngay, và sau khi deploy chỉ cần
+  mở link kiểm tra footer thay vì xoá dữ liệu trang.
 
 ---
 
@@ -338,7 +369,10 @@ Repo đã bật GitHub Pages, nguồn là nhánh `main`:
 
 1. Push lên `main` → GitHub Pages tự build (khoảng 1 phút).
 2. Truy cập <https://thinhbnt.github.io/suc-khoe-hoc-duong/>.
-3. Không cần mua server hay tên miền; HTTPS có sẵn (bắt buộc để cài PWA).
+3. Kiểm tra **footer** ở cuối trang: phải hiện đúng số phiên bản vừa phát hành và
+   *"Bộ nhớ đệm health-pwa-vN — đã là bản mới nhất"*. Nếu vẫn thấy số cũ, CDN của GitHub Pages
+   đang giữ bản cache (thường vài phút) — chờ rồi tải lại.
+4. Không cần mua server hay tên miền; HTTPS có sẵn (bắt buộc để cài PWA).
    Có thể thay bằng Cloudflare Pages / Vercel / Firebase Hosting nếu muốn.
 
 ---

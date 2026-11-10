@@ -3,11 +3,14 @@
 // ⚠️ QUY TẮC BẮT BUỘC KHI SỬA CODE:
 // Mỗi khi thay đổi bất kỳ file nào nằm trong danh sách ASSETS bên dưới
 // (index.html, nutritionEngine.js, storage.js, manifest.json, ...), PHẢI tăng
-// CACHE_NAME lên v(N+1) — ví dụ: "health-pwa-v4" -> "health-pwa-v5".
+// CACHE_NAME lên v(N+1) — ví dụ: "health-pwa-v5" -> "health-pwa-v6".
 // Lý do: Service Worker này không có bước "activate" + skipWaiting (giữ đúng
 // kiến trúc trong tài liệu), nên trình duyệt KHÔNG tự xoá cache cũ. Nếu giữ
 // nguyên tên cache, người đã cài app sẽ tiếp tục chạy bản code cũ.
-const CACHE_NAME = "health-pwa-v4";
+//
+// Tên cache này PHẢI trùng hằng EXPECTED_CACHE trong index.html
+// (tests/test_version_consistency.py sẽ báo lỗi nếu lệch).
+const CACHE_NAME = "health-pwa-v5";
 const ASSETS = [
   "./",
   "./index.html",

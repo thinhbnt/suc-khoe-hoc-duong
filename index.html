@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Khuyến Nghị Dinh Dưỡng</title>
+  <!-- Nguồn duy nhất của số phiên bản: đổi ở đây, script đọc lại qua meta[name="app-version"] -->
+  <meta name="app-version" content="1.2.0">
+  <meta name="app-build" content="2026-11-10">
   <link rel="manifest" href="manifest.json">
   <style>
     :root { --bg: #f8fafc; --card: #ffffff; --text: #1e293b; --muted: #64748b; --border: #e2e8f0; --field: #ffffff; }
@@ -50,6 +53,10 @@
     .chart-svg { width: 100%; height: auto; display: block; color: var(--text); }
     .chart-empty, .status-text { font-size: 13px; color: var(--muted); }
     .status-text { margin-top: 8px; display: none; }
+    .app-footer { max-width: 480px; margin: 0 auto 24px; text-align: center; font-size: 12px; color: var(--muted); line-height: 1.7; }
+    .app-footer strong { color: var(--text); font-variant-numeric: tabular-nums; }
+    .app-footer .is-stale { color: #b45309; }
+    @media (prefers-color-scheme: dark) { .app-footer .is-stale { color: #fbbf24; } }
     @media (max-width: 360px) { .history-item { flex-direction: column; } .btn-del { width: 100%; } }
   </style>
 </head>
@@ -146,15 +153,33 @@
     <div id="dataStatus" class="status-text" role="status"></div>
   </div>
 
+  <footer class="app-footer">
+    <div>Phiên bản <strong id="appVersion">…</strong> <span id="appBuild"></span></div>
+    <div id="swVersion">Đang kiểm tra bộ nhớ đệm…</div>
+  </footer>
+
   <script type="module">
     import { calculateMetrics, splitMeals, MEAL_LABELS } from './nutritionEngine.js';
     import { saveRecord, getAllRecords, deleteRecord, clearAllRecords, exportDataToJSON, importDataFromJSON } from './storage.js';
     import { loadFoods, buildMealPlan, getActivityAdvice } from './recommendations.js';
     import { bmiForAge, WHO_BMI_CATEGORIES } from './bmiForAge.js';
 
+    // ---------- Phiên bản ----------
+    // Số phiên bản đọc từ <meta name="app-version"> → chỉ có MỘT nguồn duy nhất.
+    const metaContent = (name) => {
+      const el = document.querySelector(`meta[name="${name}"]`);
+      return el ? el.getAttribute('content') || '' : '';
+    };
+    const APP_VERSION = metaContent('app-version') || '0.0.0';
+    const APP_BUILD = metaContent('app-build');
+    // PHẢI trùng CACHE_NAME trong sw.js (tests/test_version_consistency.py kiểm tra).
+    const EXPECTED_CACHE = 'health-pwa-v5';
+
     // Đăng ký Service Worker
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js').catch(console.error);
+      // Khi SW sẵn sàng (lần đầu cài xong cache), cập nhật lại dòng phiên bản ở footer
+      navigator.serviceWorker.ready.then(() => renderVersion()).catch(() => {});
     }
 
     // Hiển thị gợi ý khẩu phần (30/40/30) và khuyến cáo vận động theo nhóm tuổi
@@ -222,6 +247,42 @@
       const el = document.getElementById('dataStatus');
       el.textContent = message || '';
       el.style.display = message ? 'block' : 'none';
+    }
+
+    // ---------- Hiển thị phiên bản + bộ nhớ đệm đang dùng ----------
+    // Đọc tên cache thật từ Cache Storage để biết app đã nhận bản mới chưa: Service Worker
+    // không dùng skipWaiting nên bản mới chỉ kích hoạt ở lần mở KẾ TIẾP.
+    async function renderVersion() {
+      const vEl = document.getElementById('appVersion');
+      const bEl = document.getElementById('appBuild');
+      const el = document.getElementById('swVersion');
+      if (!vEl || !el) return;
+      vEl.textContent = 'v' + APP_VERSION;
+      bEl.textContent = APP_BUILD ? `(${APP_BUILD})` : '';
+      el.classList.remove('is-stale');
+
+      let names = [];
+      try {
+        names = (await caches.keys()).filter(k => k.indexOf('health-pwa-') === 0);
+      } catch (err) {
+        names = [];
+      }
+      names.sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+      const newest = names[names.length - 1] || '';
+      if (!newest) {
+        el.textContent = 'Chưa có bộ nhớ đệm offline — mở lại ứng dụng một lần để bật chế độ ngoại tuyến.';
+        return;
+      }
+      const oldOnes = names.filter(n => n !== EXPECTED_CACHE);
+      if (newest !== EXPECTED_CACHE) {
+        el.classList.add('is-stale');
+        el.textContent = `Bộ nhớ đệm ${newest} — bản ${EXPECTED_CACHE} sẽ kích hoạt ở lần mở kế tiếp.`;
+        return;
+      }
+      el.textContent = `Bộ nhớ đệm ${newest} — đã là bản mới nhất`
+        + (oldOnes.length
+          ? ` (còn ${oldOnes.length} bản cũ: ${oldOnes.join(', ')} — xoá dữ liệu trang để dọn)`
+          : '');
     }
 
     // ---------- Phân loại BMI theo tuổi: WHO 2007 (10-19 tuổi) ----------
@@ -435,6 +496,8 @@
 
     // Vẽ lịch sử ngay khi mở ứng dụng (dữ liệu đã có trên thiết bị)
     renderHistory();
+    // Hiển thị phiên bản app + bộ nhớ đệm đang dùng ở footer
+    renderVersion();
   </script>
 </body>
 </html>
