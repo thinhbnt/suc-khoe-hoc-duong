@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Khuyến Nghị Dinh Dưỡng</title>
   <!-- Nguồn duy nhất của số phiên bản: đổi ở đây, script đọc lại qua meta[name="app-version"] -->
-  <meta name="app-version" content="1.2.0">
+  <meta name="app-version" content="1.3.0">
   <meta name="app-build" content="2026-11-10">
   <link rel="manifest" href="manifest.json">
   <style>
@@ -35,6 +35,32 @@
     .meal-row li { margin-bottom: 2px; }
     .meal-total { font-size: 13px; color: #047857; font-weight: 600; margin-top: 6px; }
     .meal-note { font-size: 12px; color: #b45309; margin-top: 4px; }
+    .meal-row .meal-items { list-style: none; padding-left: 0; }
+    .meal-item { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+    .meal-item-text { flex: 1 1 auto; }
+    .meal-item-text em { font-style: normal; color: var(--muted); }
+    .meal-item-group { display: block; font-size: 11px; color: var(--muted); }
+    .btn-swap { width: auto; flex: 0 0 auto; padding: 4px 10px; font-size: 12px; background: #2563eb; border-radius: 4px; }
+    .meal-empty { font-size: 14px; margin: 0; color: var(--muted); }
+    .btn-add { width: auto; margin-top: 6px; padding: 4px 10px; font-size: 12px; background: transparent; color: #2563eb; border: 1px dashed #93c5fd; }
+    .swap-panel { border: 1px dashed var(--border); border-radius: 6px; padding: 8px; margin: 8px 0; background: var(--bg); }
+    .swap-label { font-size: 13px; margin-bottom: 4px; }
+    .swap-count, .swap-empty { font-size: 12px; color: var(--muted); margin: 4px 0 0; }
+    .swap-results { display: flex; flex-direction: column; gap: 4px; max-height: 240px; overflow-y: auto; margin-top: 6px; }
+    .swap-result { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: left; font-size: 13px; font-weight: 400; padding: 6px 8px; background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 4px; }
+    .swap-result:hover { border-color: #10b981; }
+    .swap-result-name { display: flex; flex-direction: column; }
+    .swap-result-portion { font-size: 11px; color: var(--muted); }
+    .swap-result-kcal { white-space: nowrap; }
+    .btn-swap-cancel { margin-top: 8px; }
+    .plan-total { font-size: 14px; font-weight: 600; color: #047857; border-top: 1px solid var(--border); margin-top: 12px; padding-top: 8px; }
+    .plan-total.is-over { color: #b45309; }
+    @media (prefers-color-scheme: dark) {
+      .plan-total { color: #34d399; }
+      .plan-total.is-over { color: #fbbf24; }
+      .btn-add { color: #93c5fd; border-color: #1e3a8a; }
+    }
+    @media (max-width: 360px) { .meal-item { flex-direction: column; } .btn-swap { width: 100%; } }
     .advice-box { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 10px; font-size: 14px; }
     .advice-box ul { margin: 6px 0 0; padding-left: 18px; }
     .error-box { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; padding: 8px; border-radius: 4px; font-size: 13px; margin-top: 8px; display: none; }
@@ -124,8 +150,10 @@
     <h3>Gợi Ý Khẩu Phần Trong Ngày</h3>
     <p style="font-size: 13px; color: #64748b; margin-top: -4px;">
       Chia từ calo mục tiêu theo tỷ lệ bữa ăn <strong>30% - 40% - 30%</strong> (Sáng - Trưa - Tối).
+      Bấm <strong>Đổi</strong> ở từng món để tìm món khác (gõ không dấu cũng được) — calo của bữa và cả ngày tự cộng lại.
     </p>
     <div id="mealPlanArea"></div>
+    <div id="planStatus" class="status-text" role="status"></div>
 
     <h3 style="margin-top: 16px;">Khuyến Cáo Vận Động</h3>
     <div id="activityArea"></div>
@@ -161,7 +189,7 @@
   <script type="module">
     import { calculateMetrics, splitMeals, MEAL_LABELS } from './nutritionEngine.js';
     import { saveRecord, getAllRecords, deleteRecord, clearAllRecords, exportDataToJSON, importDataFromJSON } from './storage.js';
-    import { loadFoods, buildMealPlan, getActivityAdvice } from './recommendations.js';
+    import { loadFoods, buildMealPlan, getActivityAdvice, searchFoods, summarizeMeal, GROUP_LABELS } from './recommendations.js';
     import { bmiForAge, WHO_BMI_CATEGORIES } from './bmiForAge.js';
 
     // ---------- Phiên bản ----------
@@ -173,7 +201,7 @@
     const APP_VERSION = metaContent('app-version') || '0.0.0';
     const APP_BUILD = metaContent('app-build');
     // PHẢI trùng CACHE_NAME trong sw.js (tests/test_version_consistency.py kiểm tra).
-    const EXPECTED_CACHE = 'health-pwa-v5';
+    const EXPECTED_CACHE = 'health-pwa-v6';
 
     // Đăng ký Service Worker
     if ('serviceWorker' in navigator) {
@@ -201,28 +229,217 @@
       // 2. Gợi ý khẩu phần theo ngân sách calo từng bữa
       try {
         const { foods } = await loadFoods();
+        foodsAll = foods;
         const budget = splitMeals(targetCalories);
-        mealArea.innerHTML = ['breakfast', 'lunch', 'dinner'].map(key => {
+        mealPlanState = { targetCalories, meals: {} };
+        MEAL_KEYS.forEach(key => {
           const plan = buildMealPlan(key, budget[key], foods);
-          const itemsHtml = plan.items.length
-            ? `<ul>${plan.items.map(i => `<li>${i.name} – ${i.portion}: <strong>${i.kcal}</strong> kcal</li>`).join('')}</ul>`
-            : '<p style="font-size: 14px; margin: 0;">Chưa có gợi ý phù hợp với ngân sách này.</p>';
-          const note = plan.remainingKcal >= 100
-            ? `<div class="meal-note">Còn ${plan.remainingKcal} kcal – có thể thêm 1 khẩu phần tinh bột, 1 ly sữa hoặc trái cây.</div>`
-            : '';
-          return `<div class="meal-row" data-meal="${key}" data-budget="${plan.budgetKcal}" data-total="${plan.totalKcal}">
-            <h4><span>${MEAL_LABELS[key]}</span><span>${plan.budgetKcal} kcal</span></h4>
-            ${itemsHtml}
-            <div class="meal-total">Tổng gợi ý: ${plan.totalKcal} / ${plan.budgetKcal} kcal</div>
-            ${note}
-          </div>`;
-        }).join('');
+          // Chỉ giữ bản sao danh sách món: đổi món chỉ sửa mảng này,
+          // không sửa dữ liệu gốc trong foods.json (đang cache trong bộ nhớ).
+          mealPlanState.meals[key] = { budgetKcal: plan.budgetKcal, items: plan.items.slice() };
+        });
+        openSwap = null;
+        setPlanStatus('');
+        renderMealRows();
       } catch (err) {
         mealArea.innerHTML = `<div class="warning-box">${err.message || 'Không tải được dữ liệu món ăn.'}</div>`;
       }
 
       planCard.style.display = 'block';
     }
+
+    // ---------- Đổi món trong khẩu phần (tìm kiếm không dấu) ----------
+    // Trạng thái kế hoạch bữa ăn nằm trong biến module; mọi con số calo đều được
+    // tính lại từ danh sách món hiện tại (summarizeMeal) nên không bao giờ lệch.
+    const MEAL_KEYS = ['breakfast', 'lunch', 'dinner'];
+    let foodsAll = [];        // toàn bộ món ăn trong foods.json, dùng cho ô tìm kiếm
+    let mealPlanState = null; // { targetCalories, meals: { breakfast: { budgetKcal, items: [] }, ... } }
+    let openSwap = null;      // { meal, idx, query } — idx = -1 nghĩa là "thêm món mới"
+
+    function mealTotalKcal(meal) {
+      return summarizeMeal(meal.items, meal.budgetKcal).totalKcal;
+    }
+
+    function planTotalKcal() {
+      return MEAL_KEYS.reduce((sum, key) => sum + mealTotalKcal(mealPlanState.meals[key]), 0);
+    }
+
+    function setPlanStatus(message) {
+      const el = document.getElementById('planStatus');
+      if (!el) return;
+      el.textContent = message || '';
+      el.style.display = message ? 'block' : 'none';
+    }
+
+    function renderMealRow(key) {
+      const meal = mealPlanState.meals[key];
+      const { totalKcal, remainingKcal } = summarizeMeal(meal.items, meal.budgetKcal);
+      const swapping = openSwap && openSwap.meal === key;
+      const itemsHtml = meal.items.length
+        ? `<ul class="meal-items">${meal.items.map((item, idx) => `
+            <li class="meal-item">
+              <span class="meal-item-text">${escapeHtml(item.name)} <em>${escapeHtml(item.portion)}</em>: <strong>${item.kcal}</strong> kcal
+                <span class="meal-item-group">${escapeHtml(GROUP_LABELS[item.group] || item.group)}</span>
+              </span>
+              <button type="button" class="btn-swap" data-meal="${key}" data-idx="${idx}"
+                aria-expanded="${swapping && openSwap.idx === idx ? 'true' : 'false'}"
+                aria-label="Đổi món ${escapeHtml(item.name)} trong ${escapeHtml(MEAL_LABELS[key])}">Đổi</button>
+            </li>`).join('')}</ul>`
+        : '<p class="meal-empty">Chưa có gợi ý phù hợp với ngân sách này — bấm “Thêm món” để tự chọn.</p>';
+      const addBtn = `<button type="button" class="btn-swap btn-add" data-meal="${key}" data-idx="-1"
+        aria-label="Thêm món cho ${escapeHtml(MEAL_LABELS[key])}">+ Thêm món</button>`;
+      const note = remainingKcal >= 100
+        ? `<div class="meal-note">Còn ${remainingKcal} kcal – có thể thêm 1 khẩu phần tinh bột, 1 ly sữa hoặc trái cây.</div>`
+        : remainingKcal < 0
+          ? `<div class="meal-note">Vượt ngân sách bữa ${-remainingKcal} kcal – nên chọn món nhẹ hơn.</div>`
+          : '';
+      return `<div class="meal-row" data-meal="${key}" data-budget="${meal.budgetKcal}" data-total="${totalKcal}">
+        <h4><span>${MEAL_LABELS[key]}</span><span>${meal.budgetKcal} kcal</span></h4>
+        ${itemsHtml}
+        ${swapping ? renderSwapPanel(key) : ''}
+        ${addBtn}
+        <div class="meal-total">Tổng gợi ý: ${totalKcal} / ${meal.budgetKcal} kcal</div>
+        ${note}
+      </div>`;
+    }
+
+    function renderSwapPanel(key) {
+      const meal = mealPlanState.meals[key];
+      const current = openSwap.idx >= 0 ? meal.items[openSwap.idx] : null;
+      const target = current ? `“${escapeHtml(current.name)}”` : 'món mới';
+      return `<div class="swap-panel" data-meal="${key}">
+        <label class="swap-label" for="swapInput-${key}">Tìm món thay cho ${target} — ${escapeHtml(MEAL_LABELS[key].toLowerCase())}</label>
+        <input type="search" id="swapInput-${key}" class="swap-input" data-meal="${key}"
+          placeholder="Gõ tên món, không cần dấu (vd: pho, sua, trung)…" autocomplete="off"
+          aria-describedby="swapCount-${key}">
+        <p class="swap-count" id="swapCount-${key}" role="status"></p>
+        <div class="swap-results" id="swapResults-${key}" role="group" aria-label="Danh sách món có thể chọn"></div>
+        <button type="button" class="secondary btn-swap-cancel">Huỷ</button>
+      </div>`;
+    }
+
+    function renderPlanTotal() {
+      const total = planTotalKcal();
+      const target = mealPlanState.targetCalories;
+      const diff = total - target;
+      const label = diff > 0 ? `vượt ${diff} kcal` : diff < 0 ? `còn dư ${-diff} kcal` : 'đúng mục tiêu';
+      return `<div class="plan-total${diff > 0 ? ' is-over' : ''}" id="planTotal" data-total="${total}" data-target="${target}">
+        Tổng 3 bữa: <strong>${total}</strong> / ${target} kcal — ${label}
+      </div>`;
+    }
+
+    function renderMealRows() {
+      const area = document.getElementById('mealPlanArea');
+      if (!area) return;
+      if (!mealPlanState) { area.innerHTML = ''; return; }
+      area.innerHTML = MEAL_KEYS.map(renderMealRow).join('') + renderPlanTotal();
+      if (openSwap) {
+        const input = document.getElementById(`swapInput-${openSwap.meal}`);
+        if (input) {
+          input.value = openSwap.query || '';
+          renderSwapResults(openSwap.meal, input.value);
+          input.focus();
+          input.setSelectionRange(input.value.length, input.value.length);
+        }
+      }
+    }
+
+    function renderSwapResults(key, query) {
+      const box = document.getElementById(`swapResults-${key}`);
+      if (!box) return;
+      const meal = mealPlanState.meals[key];
+      const current = openSwap && openSwap.idx >= 0 ? meal.items[openSwap.idx] : null;
+      const found = searchFoods(query, foodsAll, key)
+        .filter(f => !current || f.id !== current.id) // bỏ chính món đang có
+        .slice(0, 15);
+      const countEl = document.getElementById(`swapCount-${key}`);
+      const q = String(query || '').trim();
+      if (countEl) {
+        countEl.textContent = q
+          ? `${found.length} món khớp “${q}” (tìm không dấu)`
+          : `${found.length} món dùng được cho bữa này — gõ để lọc, không cần dấu`;
+      }
+      box.innerHTML = found.length
+        ? found.map(f => `<button type="button" class="swap-result" data-meal="${key}" data-pick="${escapeHtml(f.id)}">
+            <span class="swap-result-name">${escapeHtml(f.name)}
+              <span class="swap-result-portion">${escapeHtml(f.portion)} · ${escapeHtml(GROUP_LABELS[f.group] || f.group)}</span></span>
+            <span class="swap-result-kcal"><strong>${f.kcal}</strong> kcal</span>
+          </button>`).join('')
+        : '<p class="swap-empty">Không tìm thấy món phù hợp cho bữa này. Thử từ khoá ngắn hơn (vd: pho, sua, trung).</p>';
+    }
+
+    // Thay (idx >= 0) hoặc thêm mới (idx = -1) một món, rồi cộng lại calo của bữa và cả ngày.
+    function applySwap(key, idx, food) {
+      const meal = mealPlanState.meals[key];
+      const before = summarizeMeal(meal.items, meal.budgetKcal).totalKcal;
+      const old = idx >= 0 ? meal.items[idx] : null;
+      if (old) meal.items[idx] = food;
+      else meal.items.push(food);
+      const after = summarizeMeal(meal.items, meal.budgetKcal).totalKcal;
+      openSwap = null;
+      renderMealRows();
+      const delta = after - before;
+      const sign = delta > 0 ? '+' : '';
+      const action = old
+        ? `Đã đổi “${old.name}” thành “${food.name}” (${food.kcal} kcal)`
+        : `Đã thêm “${food.name}” (${food.kcal} kcal)`;
+      setPlanStatus(`${action} ở ${MEAL_LABELS[key].toLowerCase()}: bữa ${before} → ${after} kcal (${sign}${delta}), tổng 3 bữa ${planTotalKcal()} kcal.`);
+    }
+
+    // ---------- Sự kiện cho khu vực khẩu phần (uỷ quyền sự kiện) ----------
+    const mealAreaEl = document.getElementById('mealPlanArea');
+
+    mealAreaEl.addEventListener('click', (e) => {
+      // 1. Chọn một món trong danh sách kết quả tìm kiếm
+      const pick = e.target.closest('.swap-result');
+      if (pick && openSwap) {
+        const food = foodsAll.find(f => f.id === pick.dataset.pick);
+        if (food) applySwap(openSwap.meal, openSwap.idx, food);
+        return;
+      }
+      // 2. Đóng bảng tìm kiếm
+      const cancel = e.target.closest('.btn-swap-cancel');
+      if (cancel) {
+        const row = cancel.closest('.meal-row');
+        const key = row ? row.dataset.meal : '';
+        openSwap = null;
+        renderMealRows();
+        const again = mealAreaEl.querySelector(`.meal-row[data-meal="${key}"] .btn-swap`);
+        if (again) again.focus();
+        return;
+      }
+      // 3. Mở / đóng bảng tìm kiếm của một món (hoặc "Thêm món")
+      const swapBtn = e.target.closest('.btn-swap');
+      if (swapBtn) {
+        const key = swapBtn.dataset.meal;
+        const idx = Number(swapBtn.dataset.idx);
+        const same = openSwap && openSwap.meal === key && openSwap.idx === idx;
+        openSwap = same ? null : { meal: key, idx, query: '' };
+        if (!same) setPlanStatus('');
+        renderMealRows();
+        if (same) {
+          const again = mealAreaEl.querySelector(`.btn-swap[data-meal="${key}"][data-idx="${idx}"]`);
+          if (again) again.focus();
+        }
+      }
+    });
+
+    mealAreaEl.addEventListener('input', (e) => {
+      const input = e.target.closest('.swap-input');
+      if (!input || !openSwap) return;
+      openSwap.query = input.value;            // giữ từ khoá khi vẽ lại danh sách
+      renderSwapResults(input.dataset.meal, input.value);
+    });
+
+    mealAreaEl.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !openSwap) return;
+      e.preventDefault();
+      const key = openSwap.meal;
+      openSwap = null;
+      renderMealRows();
+      const again = mealAreaEl.querySelector(`.meal-row[data-meal="${key}"] .btn-swap`);
+      if (again) again.focus();
+    });
 
     // ---------- Tiện ích hiển thị ----------
     function escapeHtml(value) {

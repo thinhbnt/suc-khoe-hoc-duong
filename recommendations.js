@@ -24,6 +24,15 @@ function byKcalDesc(a, b) {
   return b.kcal - a.kcal || a.id.localeCompare(b.id);
 }
 
+// Nhãn nhóm món ăn dùng cho ô tìm kiếm (phải khớp meta.groups trong foods.json —
+// tests/test_food_search.py kiểm tra để hai nơi không lệch nhau).
+export const GROUP_LABELS = {
+  tinh_bot: "Tinh bột",
+  dam: "Đạm (thịt, cá, trứng, đậu)",
+  rau_qua: "Rau & trái cây",
+  bo_sung: "Bổ sung (sữa, hạt, chất béo)"
+};
+
 /**
  * Gợi ý khẩu phần cho 1 bữa trong phạm vi ngân sách calo của bữa đó.
  *
@@ -95,6 +104,72 @@ export function buildMealPlan(mealKey, budgetKcal, foods) {
     totalKcal: budgetKcal - rest,
     remainingKcal: rest
   };
+}
+
+/**
+ * Cộng lại calo của một bữa sau khi người dùng đổi món.
+ * Dùng chung cho giao diện: tổng bữa và phần calo còn dư luôn được tính lại
+ * từ danh sách món hiện tại, không lưu sẵn con số nào.
+ */
+export function summarizeMeal(items, budgetKcal) {
+  const list = Array.isArray(items) ? items : [];
+  const totalKcal = list.reduce((sum, item) => sum + (Number(item && item.kcal) || 0), 0);
+  return {
+    totalKcal,
+    remainingKcal: (Number(budgetKcal) || 0) - totalKcal
+  };
+}
+
+/**
+ * Bỏ dấu tiếng Việt để tìm kiếm không dấu:
+ *   "Phở bò" -> "pho bo", "Đậu phụ luộc" -> "dau phu luoc".
+ * Chữ "đ/Đ" không tách được bằng NFD nên phải thay riêng.
+ */
+export function normalizeForSearch(text) {
+  return String(text == null ? "" : text)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "d")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Tìm món ăn để thay thế: không phân biệt dấu, không phân biệt hoa/thường.
+ * - Chỉ lấy món dùng được cho bữa đang xét (trường "meals" trong foods.json).
+ * - Ưu tiên: trùng khít tên > tên bắt đầu bằng từ khoá > tên chứa từ khoá >
+ *   khớp rời từng từ > từ khoá bắt đầu bằng tên nhóm món ("rau", "dam", "tinh"...);
+ *   cùng mức ưu tiên thì kcal giảm dần.
+ * - Từ khoá rỗng trả về toàn bộ món của bữa (để người dùng xem danh sách).
+ */
+export function searchFoods(query, foods, mealKey) {
+  const list = Array.isArray(foods) ? foods : [];
+  const pool = mealKey
+    ? list.filter((f) => Array.isArray(f.meals) && f.meals.includes(mealKey))
+    : list.slice();
+  const q = normalizeForSearch(query);
+  if (!q) return pool.slice().sort(byKcalDesc);
+
+  const words = q.split(" ").filter(Boolean);
+  const scored = [];
+  for (const food of pool) {
+    const name = normalizeForSearch(food.name);
+    const group = normalizeForSearch(GROUP_LABELS[food.group] || food.group);
+    let score;
+    if (name === q) score = 0;
+    else if (name.startsWith(q)) score = 1;
+    else if (name.includes(q)) score = 2;
+    else if (words.length > 1 && words.every((w) => name.includes(w))) score = 3;
+    // Chỉ khớp nhóm khi từ khoá BẮT ĐẦU bằng tên nhóm ("dau" sẽ không kéo theo
+    // cả nhóm "Đạm (thịt, cá, trứng, đậu)").
+    else if (group.startsWith(q)) score = 4;
+    else continue;
+    scored.push({ food, score });
+  }
+  scored.sort((a, b) => a.score - b.score || byKcalDesc(a.food, b.food));
+  return scored.map((entry) => entry.food);
 }
 
 /**
