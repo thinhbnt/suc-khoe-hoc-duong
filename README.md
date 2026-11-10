@@ -22,6 +22,7 @@ Toàn bộ thuật toán chạy **100% trên máy người dùng** (client-side)
 | Lịch sử & biểu đồ | Danh sách các lần đo đã lưu + biểu đồ SVG xu hướng BMI (vẽ tay, không dùng thư viện) |
 | Xoá dữ liệu | Xoá từng lần đo hoặc xoá toàn bộ ngay trong app (bấm 2 lần để tránh nhầm) |
 | Gợi ý khẩu phần | Chia calo mục tiêu theo tỷ lệ bữa **30 / 40 / 30** và gợi ý món Việt cụ thể cho từng bữa |
+| Đổi món trong bữa | Mỗi món có nút **Đổi** → mở ô tìm kiếm món (gõ **không dấu** cũng được), danh sách kết quả kèm kcal; chọn món mới là calo của bữa và **tổng cả ngày tự cộng lại**. Có thêm nút **+ Thêm món** |
 | Khuyến cáo vận động | Theo nhóm tuổi (dưới 18 / 18–64 / từ 65), tham khảo WHO 2020 |
 | Sao lưu / Phục hồi | Xuất toàn bộ dữ liệu ra file `.json` và nhập lại từ file |
 | Chạy offline | Service Worker cache tĩnh; cài được lên màn hình chính (chế độ `standalone`) |
@@ -96,6 +97,24 @@ Sau khi có ngân sách từng bữa, `buildMealPlan()` chọn món từ `foods.
 Mọi món đều được chọn sao cho **tổng ≤ ngân sách bữa**; phần dư được hiển thị minh bạch
 (*"Còn X kcal – có thể thêm …"*) chứ không tự bịa thêm món.
 
+### 2.5.1. Đổi món sau khi gợi ý (tìm kiếm không dấu)
+
+Danh sách gợi ý chỉ là điểm khởi đầu — người dùng đổi được từng món:
+
+1. Bấm **Đổi** cạnh một món (hoặc **+ Thêm món** ở cuối bữa) → mở ô tìm kiếm ngay trong bữa đó.
+2. Gõ từ khoá tuỳ ý, **không cần dấu**: `pho` → *Phở bò*, `dau` → *Đậu phụ luộc*, `sua` → *Sữa…*.
+   Chuẩn hoá bằng `normalizeForSearch()`: Unicode NFD → bỏ dấu kết hợp (`\u0300-\u036f`) →
+   `đ/Đ → d` (chữ `đ` không tách được bằng NFD nên phải thay riêng) → chữ thường, gộp khoảng trắng.
+3. Kết quả **chỉ gồm món dùng được cho bữa đang xét** (trường `meals` trong `foods.json`) và hiện
+   kèm khẩu phần + **kcal**, sắp theo mức khớp (trùng khít → bắt đầu bằng → chứa từ khoá → khớp rời
+   từng từ → từ khoá bắt đầu bằng tên nhóm như `rau` / `dam` / `tinh`), cùng mức thì kcal giảm dần.
+   Tối đa 15 kết quả.
+4. Chọn một món → thay đúng vị trí món cũ (hoặc thêm vào cuối bữa), rồi **`summarizeMeal()` cộng lại
+   từ đầu**: `Tổng gợi ý: X / ngân sách`, dòng **`Tổng 3 bữa: X / calo mục tiêu`** và nhắc *còn dư /
+   vượt bao nhiêu kcal*. Không có con số calo nào được lưu sẵn nên không thể lệch.
+5. Đóng bảng bằng **Huỷ** hoặc phím **Esc**; số liệu đã đổi **không** ghi vào lịch sử (chỉ là bản
+   nháp trên màn hình, tính lại mỗi lần bấm "Tính toán").
+
 ### 2.6. Khuyến cáo vận động (tham khảo WHO 2020)
 
 | Nhóm tuổi | Khuyến cáo chính |
@@ -148,7 +167,7 @@ suc-khoe-hoc-duong/
 ├── index.html                      # UI (form, kết quả, BMI theo tuổi, gợi ý khẩu phần, lịch sử, sao lưu) + script type="module"
 ├── nutritionEngine.js              # Thuật toán BMI / BMR / TDEE / rào chắn an toàn / chia bữa 30-40-30
 ├── bmiForAge.js                    # z-score & bách phân vị BMI theo tuổi — bảng LMS WHO 2007 (10-19 tuổi)
-├── recommendations.js              # Gợi ý khẩu phần theo ngân sách bữa + khuyến cáo vận động theo tuổi
+├── recommendations.js              # Gợi ý khẩu phần theo ngân sách bữa + tìm món thay thế (không dấu) + khuyến cáo vận động
 ├── foods.json                      # Dữ liệu 35 món Việt (kcal / khẩu phần / nhóm / bữa phù hợp)
 ├── storage.js                      # IndexedDB + xoá bản ghi + Sao lưu / Phục hồi JSON
 ├── sw.js                           # Service Worker cache tĩnh (chạy offline)
@@ -159,6 +178,7 @@ suc-khoe-hoc-duong/
 │   ├── test_food_data.py           # Test dữ liệu foods.json + tỷ lệ chia bữa 30/40/30
 │   ├── test_bmi_for_age.py         # Test bảng LMS + z-score khớp dữ liệu WHO 2007
 │   ├── test_version_consistency.py # Test phiên bản app ↔ CACHE_NAME của Service Worker ↔ module được cache
+│   ├── test_food_search.py         # Test hợp đồng của ô tìm món: export, nhãn nhóm ↔ foods.json, UI đổi món
 │   └── fixtures/
 │       ├── bfawho2007.txt          # Bảng LMS gốc của WHO (nguyên văn, 340 dòng)
 │       └── who2007_zbmi_sample.csv # 12 ca (BMI, tuổi tháng, z) do WHO AnthroPlus tính
@@ -180,6 +200,10 @@ Không dùng thư viện ngoài, không cần `npm install`, không cần bướ
 | `recommendations.js` | `loadFoods()` | `fetch('./foods.json')` và cache trong bộ nhớ |
 | | `buildMealPlan(mealKey, budgetKcal, foods)` | Trả `{ meal, budgetKcal, items[], totalKcal, remainingKcal }` |
 | | `getActivityAdvice(age)` | Trả `{ group, headline, details[], source }` hoặc `null` nếu tuổi ngoài 10–100 |
+| | `searchFoods(query, foods, mealKey)` | Tìm món theo từ khoá **không dấu**, chỉ trong món hợp với bữa; trả mảng món đã sắp theo độ khớp |
+| | `normalizeForSearch(text)` | `"Phở bò"` → `"pho bo"`, `"Đậu phụ"` → `"dau phu"` (NFD + bỏ dấu + `đ→d`) |
+| | `summarizeMeal(items, budgetKcal)` | Trả `{ totalKcal, remainingKcal }` — cộng lại calo sau khi đổi món |
+| | `GROUP_LABELS` | Nhãn 4 nhóm món (phải trùng `meta.groups` của `foods.json` — có test) |
 | `bmiForAge.js` | `LMS_BMI_FOR_AGE`, `WHO_BMI_CATEGORIES`, `WHO_BMI_REFERENCE` | Bảng LMS WHO 2007 (tháng 120–229) và 5 nhóm phân loại |
 | | `bmiForAge(bmi, ageYears, gender)` | `{ z, percentile, medianBmi, category, reference, ageMonths }`; `null` nếu tuổi ngoài 10–19 |
 | | `whoAdjustedZScore(value, lms)` | z-score đã hiệu chỉnh ngoài ±3SD (đúng như WHO AnthroPlus) |
@@ -250,10 +274,11 @@ python -m unittest discover -s tests -v
 # hoặc chạy từng file:
 python tests/test_nutrition_reference.py -v
 python tests/test_food_data.py -v
+python tests/test_food_search.py -v
 python -m unittest discover -s tests -p "test_bmi_for_age.py" -v
 ```
 
-Kết quả mong đợi: `Ran 19 tests ... OK`.
+Kết quả mong đợi: `Ran 24 tests ... OK`.
 
 - `test_nutrition_reference.py` đối chiếu **3 case vàng** BMI/BMR/TDEE — nếu sửa công thức trong
   `nutritionEngine.js` mà làm lệch một trong các giá trị bên dưới thì test sẽ báo lỗi.
@@ -268,6 +293,17 @@ Kết quả mong đợi: `Ran 19 tests ... OK`.
   chạy mãi bản cũ; (2) một module được `import` trong `index.html` nhưng thiếu trong `ASSETS` của
   Service Worker — app sẽ trắng trang khi mở ngoại tuyến. Test cũng kiểm tra `meta[name="app-version"]`
   đúng định dạng semver và footer thật sự có `#appVersion` / `#swVersion`.
+- `test_food_search.py` giữ các "hợp đồng" của tính năng **đổi món**: `recommendations.js` phải
+  export `searchFoods` / `normalizeForSearch` / `summarizeMeal` / `GROUP_LABELS`; nhãn trong
+  `GROUP_LABELS` phải **trùng `meta.groups` của `foods.json`** (sửa một bên mà quên bên kia là đỏ);
+  `normalizeForSearch` phải thật sự xử lý `đ/Đ` (nếu thiếu, gõ `dau` sẽ không ra *Đậu phụ*);
+  `index.html` phải nối ô tìm kiếm vào sự kiện và có dòng `#planTotal` mang `data-total`; mỗi bữa
+  phải có ≥ 5 món để ô tìm kiếm có lựa chọn.
+
+Ngoài bộ test Python còn có **E2E headless Chrome** (119 check, không nằm trong repo vì cần tải
+Chrome): chạy thật luồng đổi món — mở ô tìm kiếm, gõ `BANH` (hoa, không dấu), gõ `com` để thấy
+việc lọc theo bữa, gõ `dau` để kiểm tra chữ `đ`, gõ `bo sung` để thấy khớp tên nhóm, chọn món rồi so
+**calo bữa và tổng 3 bữa tự cộng lại**.
 
 | Case | Ghi chú | BMI | BMR | TDEE | Calo mục tiêu |
 | --- | --- | --- | --- | --- | --- |
@@ -287,9 +323,9 @@ Service Worker trong dự án **cố tình không dùng** `self.skipWaiting()` /
 > 3 chỗ đồng bộ.**
 >
 > ```js
-> const CACHE_NAME     = "health-pwa-v5";      // sw.js      → "health-pwa-v6", "health-pwa-v7", ...
-> const EXPECTED_CACHE = 'health-pwa-v5';      // index.html → phải trùng CACHE_NAME ở trên
-> <meta name="app-version" content="1.2.0">    // index.html → 1.2.1 / 1.3.0 / 2.0.0 (semver)
+> const CACHE_NAME     = "health-pwa-v6";      // sw.js      → "health-pwa-v7", "health-pwa-v8", ...
+> const EXPECTED_CACHE = 'health-pwa-v6';      // index.html → phải trùng CACHE_NAME ở trên
+> <meta name="app-version" content="1.3.0">    // index.html → 1.3.1 / 1.4.0 / 2.0.0 (semver)
 > <meta name="app-build"   content="2026-11-10"><!-- index.html → ngày phát hành -->
 > ```
 >
@@ -318,8 +354,8 @@ git push origin main        # GitHub Pages tự build lại trong ~1 phút
 
 Cuối trang có một dòng footer:
 
-> Phiên bản **v1.2.0** (2026-11-10)
-> Bộ nhớ đệm health-pwa-v5 — đã là bản mới nhất
+> Phiên bản **v1.3.0** (2026-11-10)
+> Bộ nhớ đệm health-pwa-v6 — đã là bản mới nhất
 
 - Số phiên bản đọc từ `<meta name="app-version">` ⇒ chỉ cần sửa **một chỗ** trong `index.html`;
   `meta[name="app-build"]` là ngày phát hành.
