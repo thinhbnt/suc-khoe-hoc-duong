@@ -1,0 +1,61 @@
+{
+  "meta": {
+    "source": "Tham khảo Bảng thành phần dinh dưỡng thực phẩm Việt Nam (Viện Dinh dưỡng Quốc gia) và nhãn dinh dưỡng phổ thông.",
+    "note": "Năng lượng là giá trị ước lượng, đã làm tròn, tính cho đúng 1 khẩu phần ở trường 'portion'. Chỉ dùng cho mục đích minh hoạ/học tập, không dùng để chỉ định điều trị.",
+    "groups": {
+      "tinh_bot": "Tinh bột",
+      "dam": "Đạm (thịt, cá, trứng, đậu)",
+      "rau_qua": "Rau & trái cây",
+      "bo_sung": "Bổ sung (sữa, hạt, chất béo)"
+    },
+    "meals": {
+      "breakfast": "Bữa sáng",
+      "lunch": "Bữa trưa",
+      "dinner": "Bữa tối"
+    },
+    "roles": {
+      "main": "Món chính trọn bữa (ăn 1 món là đủ)",
+      "side": "Món dùng kèm"
+    }
+  },
+  "foods": [
+    { "id": "pho_bo", "name": "Phở bò", "group": "tinh_bot", "role": "main", "portion": "1 bát (500 ml)", "kcal": 430, "meals": ["breakfast", "lunch"] },
+    { "id": "banh_mi_thit", "name": "Bánh mì thịt", "group": "tinh_bot", "role": "main", "portion": "1 ổ (100 g)", "kcal": 420, "meals": ["breakfast"] },
+    { "id": "xoi_dau_xanh", "name": "Xôi đậu xanh", "group": "tinh_bot", "role": "main", "portion": "1 gói (150 g)", "kcal": 320, "meals": ["breakfast"] },
+    { "id": "banh_cuon", "name": "Bánh cuốn", "group": "tinh_bot", "role": "main", "portion": "1 suất (3 cuốn)", "kcal": 300, "meals": ["breakfast"] },
+    { "id": "bun_cha", "name": "Bún chả", "group": "tinh_bot", "role": "main", "portion": "1 suất", "kcal": 480, "meals": ["lunch"] },
+    { "id": "com_trang", "name": "Cơm trắng", "group": "tinh_bot", "role": "side", "portion": "1 bát (200 g)", "kcal": 260, "meals": ["lunch", "dinner"] },
+    { "id": "com_gao_lut", "name": "Cơm gạo lứt", "group": "tinh_bot", "role": "side", "portion": "1 bát (200 g)", "kcal": 240, "meals": ["lunch", "dinner"] },
+    { "id": "bun_gao", "name": "Bún gạo luộc", "group": "tinh_bot", "role": "side", "portion": "1 bát (200 g)", "kcal": 220, "meals": ["breakfast", "lunch", "dinner"] },
+    { "id": "khoai_lang", "name": "Khoai lang luộc", "group": "tinh_bot", "role": "side", "portion": "1 củ (150 g)", "kcal": 170, "meals": ["breakfast"] },
+    { "id": "ngo_luoc", "name": "Ngô luộc", "group": "tinh_bot", "role": "side", "portion": "1 bắp (200 g)", "kcal": 180, "meals": ["breakfast"] },
+
+    { "id": "trung_ga", "name": "Trứng gà luộc", "group": "dam", "role": "side", "portion": "1 quả (50 g)", "kcal": 75, "meals": ["breakfast", "lunch", "dinner"] },
+    { "id": "thit_ga_luoc", "name": "Thịt gà luộc (ức)", "group": "dam", "role": "side", "portion": "100 g", "kcal": 165, "meals": ["lunch", "dinner"] },
+    { "id": "thit_heo_nac", "name": "Thịt heo nạc luộc", "group": "dam", "role": "side", "portion": "100 g", "kcal": 145, "meals": ["lunch", "dinner"] },
+    { "id": "thit_bo_xao", "name": "Thịt bò xào", "group": "dam", "role": "side", "portion": "100 g", "kcal": 190, "meals": ["lunch", "dinner"] },
+    { "id": "ca_ro_phi", "name": "Cá rô phi hấp", "group": "dam", "role": "side", "portion": "100 g", "kcal": 95, "meals": ["lunch", "dinner"] },
+    { "id": "ca_basa", "name": "Cá basa hấp", "group": "dam", "role": "side", "portion": "100 g", "kcal": 90, "meals": ["lunch", "dinner"] },
+    { "id": "tom_luoc", "name": "Tôm luộc", "group": "dam", "role": "side", "portion": "100 g", "kcal": 90, "meals": ["lunch", "dinner"] },
+    { "id": "dau_phu", "name": "Đậu phụ luộc", "group": "dam", "role": "side", "portion": "100 g", "kcal": 80, "meals": ["lunch", "dinner"] },
+    { "id": "cha_ca", "name": "Chả cá hấp", "group": "dam", "role": "side", "portion": "100 g", "kcal": 130, "meals": ["lunch", "dinner"] },
+
+    { "id": "rau_muong", "name": "Rau muống luộc", "group": "rau_qua", "role": "side", "portion": "1 bát (150 g)", "kcal": 40, "meals": ["lunch", "dinner"] },
+    { "id": "canh_rau_ngot", "name": "Canh rau ngót", "group": "rau_qua", "role": "side", "portion": "1 bát (250 ml)", "kcal": 30, "meals": ["lunch", "dinner"] },
+    { "id": "bap_cai", "name": "Bắp cải luộc", "group": "rau_qua", "role": "side", "portion": "100 g", "kcal": 25, "meals": ["lunch", "dinner"] },
+    { "id": "cai_xanh", "name": "Cải xanh luộc", "group": "rau_qua", "role": "side", "portion": "100 g", "kcal": 25, "meals": ["lunch", "dinner"] },
+    { "id": "dua_chuot", "name": "Dưa chuột", "group": "rau_qua", "role": "side", "portion": "1 quả (100 g)", "kcal": 16, "meals": ["breakfast", "lunch", "dinner"] },
+    { "id": "ca_chua", "name": "Cà chua", "group": "rau_qua", "role": "side", "portion": "1 quả (100 g)", "kcal": 20, "meals": ["breakfast", "lunch", "dinner"] },
+    { "id": "chuoi", "name": "Chuối chín", "group": "rau_qua", "role": "side", "portion": "1 quả (100 g)", "kcal": 90, "meals": ["breakfast"] },
+    { "id": "cam", "name": "Cam", "group": "rau_qua", "role": "side", "portion": "1 quả (150 g)", "kcal": 60, "meals": ["breakfast", "lunch"] },
+    { "id": "tao", "name": "Táo", "group": "rau_qua", "role": "side", "portion": "1 quả (150 g)", "kcal": 80, "meals": ["breakfast", "lunch"] },
+    { "id": "du_du", "name": "Đu đủ chín", "group": "rau_qua", "role": "side", "portion": "1 miếng (150 g)", "kcal": 55, "meals": ["breakfast", "lunch", "dinner"] },
+    { "id": "thanh_long", "name": "Thanh long", "group": "rau_qua", "role": "side", "portion": "1 miếng (150 g)", "kcal": 60, "meals": ["breakfast", "lunch"] },
+
+    { "id": "sua_tuoi", "name": "Sữa tươi không đường", "group": "bo_sung", "role": "side", "portion": "200 ml", "kcal": 120, "meals": ["breakfast"] },
+    { "id": "sua_dau_nanh", "name": "Sữa đậu nành không đường", "group": "bo_sung", "role": "side", "portion": "200 ml", "kcal": 80, "meals": ["breakfast"] },
+    { "id": "sua_chua", "name": "Sữa chua không đường", "group": "bo_sung", "role": "side", "portion": "1 hộp (100 g)", "kcal": 60, "meals": ["breakfast"] },
+    { "id": "lac_rang", "name": "Lạc rang", "group": "bo_sung", "role": "side", "portion": "20 g", "kcal": 115, "meals": ["breakfast", "lunch"] },
+    { "id": "dau_an", "name": "Dầu ăn", "group": "bo_sung", "role": "side", "portion": "1 thìa (5 ml)", "kcal": 45, "meals": ["lunch", "dinner"] }
+  ]
+}

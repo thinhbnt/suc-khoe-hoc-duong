@@ -16,6 +16,14 @@
     .result-box { background: #f0fdf4; border: 1px solid #bbf7d0; padding: 12px; border-radius: 6px; margin-top: 16px; display: none; }
     .warning-box { background: #fffbeb; border: 1px solid #fef3c7; color: #b45309; padding: 8px; border-radius: 4px; font-size: 13px; margin-top: 8px; }
     .disclaimer { font-size: 12px; color: #64748b; margin-top: 12px; border-top: 1px solid #e2e8f0; padding-top: 8px; }
+    .meal-row { border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; margin-bottom: 8px; }
+    .meal-row h4 { margin: 0 0 6px; font-size: 15px; display: flex; justify-content: space-between; }
+    .meal-row ul { margin: 0; padding-left: 18px; font-size: 14px; }
+    .meal-row li { margin-bottom: 2px; }
+    .meal-total { font-size: 13px; color: #047857; font-weight: 600; margin-top: 6px; }
+    .meal-note { font-size: 12px; color: #b45309; margin-top: 4px; }
+    .advice-box { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 10px; font-size: 14px; }
+    .advice-box ul { margin: 6px 0 0; padding-left: 18px; }
   </style>
 </head>
 <body>
@@ -76,6 +84,22 @@
     </div>
   </div>
 
+  <div id="planCard" class="card" style="display: none;">
+    <h3>Gợi Ý Khẩu Phần Trong Ngày</h3>
+    <p style="font-size: 13px; color: #64748b; margin-top: -4px;">
+      Chia từ calo mục tiêu theo tỷ lệ bữa ăn <strong>30% - 40% - 30%</strong> (Sáng - Trưa - Tối).
+    </p>
+    <div id="mealPlanArea"></div>
+
+    <h3 style="margin-top: 16px;">Khuyến Cáo Vận Động</h3>
+    <div id="activityArea"></div>
+
+    <div class="disclaimer">
+      * Năng lượng món ăn là số liệu tham khảo đã làm tròn (xem <code>foods.json</code>).
+      Khuyến cáo vận động theo WHO 2020, cần điều chỉnh theo thể trạng và chỉ định y khoa.
+    </div>
+  </div>
+
   <div class="card">
     <h3>Quản Lý Dữ Liệu Cục Bộ (Private)</h3>
     <p style="font-size: 13px; color: #64748b;">Toàn bộ dữ liệu chỉ lưu trên máy bạn, không gửi qua máy chủ trung gian.</p>
@@ -85,12 +109,55 @@
   </div>
 
   <script type="module">
-    import { calculateMetrics } from './nutritionEngine.js';
+    import { calculateMetrics, splitMeals, MEAL_LABELS } from './nutritionEngine.js';
     import { saveRecord, exportDataToJSON, importDataFromJSON } from './storage.js';
+    import { loadFoods, buildMealPlan, getActivityAdvice } from './recommendations.js';
 
     // Đăng ký Service Worker
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js').catch(console.error);
+    }
+
+    // Hiển thị gợi ý khẩu phần (30/40/30) và khuyến cáo vận động theo nhóm tuổi
+    async function renderRecommendations(age, targetCalories) {
+      const planCard = document.getElementById('planCard');
+      const mealArea = document.getElementById('mealPlanArea');
+      const actArea = document.getElementById('activityArea');
+
+      // 1. Khuyến cáo vận động (độc lập với dữ liệu món ăn)
+      const advice = getActivityAdvice(age);
+      actArea.innerHTML = advice
+        ? `<div class="advice-box">
+             <strong>Nhóm ${advice.group}:</strong> ${advice.headline}
+             <ul>${advice.details.map(d => `<li>${d}</li>`).join('')}</ul>
+             <p style="font-size: 12px; color: #64748b; margin: 8px 0 0;">Nguồn: ${advice.source}</p>
+           </div>`
+        : '<div class="warning-box">Chưa có khuyến cáo vận động cho độ tuổi này.</div>';
+
+      // 2. Gợi ý khẩu phần theo ngân sách calo từng bữa
+      try {
+        const { foods } = await loadFoods();
+        const budget = splitMeals(targetCalories);
+        mealArea.innerHTML = ['breakfast', 'lunch', 'dinner'].map(key => {
+          const plan = buildMealPlan(key, budget[key], foods);
+          const itemsHtml = plan.items.length
+            ? `<ul>${plan.items.map(i => `<li>${i.name} – ${i.portion}: <strong>${i.kcal}</strong> kcal</li>`).join('')}</ul>`
+            : '<p style="font-size: 14px; margin: 0;">Chưa có gợi ý phù hợp với ngân sách này.</p>';
+          const note = plan.remainingKcal >= 100
+            ? `<div class="meal-note">Còn ${plan.remainingKcal} kcal – có thể thêm 1 khẩu phần tinh bột, 1 ly sữa hoặc trái cây.</div>`
+            : '';
+          return `<div class="meal-row" data-meal="${key}" data-budget="${plan.budgetKcal}" data-total="${plan.totalKcal}">
+            <h4><span>${MEAL_LABELS[key]}</span><span>${plan.budgetKcal} kcal</span></h4>
+            ${itemsHtml}
+            <div class="meal-total">Tổng gợi ý: ${plan.totalKcal} / ${plan.budgetKcal} kcal</div>
+            ${note}
+          </div>`;
+        }).join('');
+      } catch (err) {
+        mealArea.innerHTML = `<div class="warning-box">${err.message || 'Không tải được dữ liệu món ăn.'}</div>`;
+      }
+
+      planCard.style.display = 'block';
     }
 
     const form = document.getElementById('healthForm');
@@ -117,6 +184,9 @@
         const warnDiv = document.getElementById('warningArea');
         warnDiv.innerHTML = res.warnings.map(w => `<div class="warning-box">${w}</div>`).join('');
         document.getElementById('resultBox').style.display = 'block';
+
+        // Gợi ý khẩu phần 30/40/30 + khuyến cáo vận động
+        await renderRecommendations(payload.age, res.targetCalories);
 
         // Lưu vào IndexedDB
         await saveRecord({ ...payload, ...res });

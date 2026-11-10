@@ -18,11 +18,14 @@ Toàn bộ thuật toán chạy **100% trên máy người dùng** (client-side)
 | Calo mục tiêu | `TDEE ± 500 kcal` theo mục tiêu Giảm / Duy trì / Tăng |
 | Rào chắn an toàn | Khoá thâm hụt calo với người dưới 18 tuổi và người thiếu cân; áp sàn calo sinh học |
 | Hồ sơ cục bộ | Ô **Tên/Biệt danh của bạn**; mỗi lần bấm tính lưu một bản ghi vào IndexedDB |
+| Gợi ý khẩu phần | Chia calo mục tiêu theo tỷ lệ bữa **30 / 40 / 30** và gợi ý món Việt cụ thể cho từng bữa |
+| Khuyến cáo vận động | Theo nhóm tuổi (dưới 18 / 18–64 / từ 65), tham khảo WHO 2020 |
 | Sao lưu / Phục hồi | Xuất toàn bộ dữ liệu ra file `.json` và nhập lại từ file |
 | Chạy offline | Service Worker cache tĩnh; cài được lên màn hình chính (chế độ `standalone`) |
 
 Ứng dụng **không** có (ngoài phạm vi MVP): đăng ký/đăng nhập, nhập bệnh lý, đồng bộ máy chủ,
-gợi ý thực đơn, xem lại lịch sử trên giao diện (dữ liệu vẫn được lưu, xem qua file sao lưu).
+thực đơn cá nhân hoá theo bệnh lý/dị ứng, xem lại lịch sử trên giao diện
+(dữ liệu vẫn được lưu, xem qua file sao lưu).
 
 ---
 
@@ -66,20 +69,56 @@ Sau đó áp dụng tuần tự 3 rào chắn:
 2. **BMI < 18.5** (thiếu cân) và chọn giảm cân → huỷ thâm hụt, `calo mục tiêu = TDEE` + cảnh báo.
 3. **Sàn calo sinh học**: nam < 1500 kcal → 1500; nữ < 1200 kcal → 1200 + cảnh báo.
 
+### 2.5. Chia bữa 30 / 40 / 30
+
+`splitMeals(calo mục tiêu)` chia calo mục tiêu cho 3 bữa:
+
+| Bữa | Tỷ lệ | Công thức |
+| --- | --- | --- |
+| Sáng | 30 % | `Math.round(calo × 0.3)` |
+| Trưa | 40 % | `Math.round(calo × 0.4)` |
+| Tối | 30 % | `calo − sáng − trưa` (nhận phần dư để **tổng 3 bữa luôn bằng calo mục tiêu**) |
+
+Ví dụ calo mục tiêu 2321 kcal → sáng **696**, trưa **928**, tối **697** (tổng = 2321).
+
+Sau khi có ngân sách từng bữa, `buildMealPlan()` chọn món từ `foods.json` theo thứ tự:
+
+1. Một **món chính trọn bữa** (phở, bánh mì, xôi, bánh cuốn, bún chả) nếu nó chiếm ≥ 55 %
+   ngân sách bữa; nếu không thì **1 món tinh bột + 1 món đạm**.
+2. Tối đa **2 món rau / trái cây**.
+3. Tối đa **2 món bổ sung** (sữa, hạt, chất béo) khi còn ≥ 60 kcal.
+4. Nếu vẫn dư ≥ 150 kcal → thêm **1 khẩu phần đạm** (hoặc tinh bột).
+
+Mọi món đều được chọn sao cho **tổng ≤ ngân sách bữa**; phần dư được hiển thị minh bạch
+(*"Còn X kcal – có thể thêm …"*) chứ không tự bịa thêm món.
+
+### 2.6. Khuyến cáo vận động (tham khảo WHO 2020)
+
+| Nhóm tuổi | Khuyến cáo chính |
+| --- | --- |
+| 10 – 17 | Trung bình–mạnh **≥ 60 phút/ngày**; ≥ 3 ngày/tuần hoạt động mạnh; hạn chế thời gian trước màn hình |
+| 18 – 64 | **150–300 phút/tuần** trung bình, hoặc 75–150 phút/tuần mạnh; tập sức mạnh ≥ 2 ngày/tuần |
+| 65 – 100 | Như trên + bài tập **thăng bằng ≥ 3 ngày/tuần** để giảm nguy cơ té ngã |
+
+Khuyến cáo này **độc lập** với dropdown "Mức độ vận động" — dropdown chỉ dùng để nhân hệ số TDEE.
+
 ---
 
 ## 3. Cấu trúc dự án
 
 ```
 suc-khoe-hoc-duong/
-├── index.html                      # Toàn bộ UI (form, kết quả, card sao lưu) + script type="module"
-├── nutritionEngine.js              # Thuật toán BMI / BMR / TDEE / rào chắn an toàn
+├── index.html                      # Toàn bộ UI (form, kết quả, gợi ý khẩu phần, card sao lưu) + script type="module"
+├── nutritionEngine.js              # Thuật toán BMI / BMR / TDEE / rào chắn an toàn / chia bữa 30-40-30
+├── recommendations.js              # Gợi ý khẩu phần theo ngân sách bữa + khuyến cáo vận động theo tuổi
+├── foods.json                      # Dữ liệu 35 món Việt (kcal / khẩu phần / nhóm / bữa phù hợp)
 ├── storage.js                      # IndexedDB + Sao lưu / Phục hồi JSON
 ├── sw.js                           # Service Worker cache tĩnh (chạy offline)
 ├── manifest.json                   # Khai báo PWA (tên, icon, standalone, theme color)
 ├── icon-192.png , icon-512.png     # Icon PWA (bắt buộc để cài lên màn hình chính)
 ├── tests/
-│   └── test_nutrition_reference.py # Bộ test tham chiếu (Python) — 3 case vàng
+│   ├── test_nutrition_reference.py # Bộ test tham chiếu (Python) — 3 case vàng BMI/BMR/TDEE
+│   └── test_food_data.py           # Test dữ liệu foods.json + tỷ lệ chia bữa 30/40/30
 ├── .gitignore
 └── README.md
 ```
@@ -93,11 +132,34 @@ Không dùng thư viện ngoài, không cần `npm install`, không cần bướ
 | `nutritionEngine.js` | `ACTIVITY_MULTIPLIERS`, `GOAL_ADJUSTMENTS` | Bảng hệ số |
 | | `validateInput({ weight, height, age, gender, activityLevel, goal })` | Ném `Error` nếu dữ liệu ngoài khoảng hợp lệ |
 | | `calculateMetrics({ ... })` | Trả `{ bmi, bmiCategory, bmr, tdee, targetCalories, warnings, calculatedAt }` |
+| | `MEAL_SPLIT`, `MEAL_LABELS` | Tỷ lệ 0.3 / 0.4 / 0.3 và nhãn "Bữa sáng / trưa / tối" |
+| | `splitMeals(targetCalories)` | Trả `{ breakfast, lunch, dinner }`, tổng luôn bằng `targetCalories` |
+| `recommendations.js` | `loadFoods()` | `fetch('./foods.json')` và cache trong bộ nhớ |
+| | `buildMealPlan(mealKey, budgetKcal, foods)` | Trả `{ meal, budgetKcal, items[], totalKcal, remainingKcal }` |
+| | `getActivityAdvice(age)` | Trả `{ group, headline, details[], source }` hoặc `null` nếu tuổi ngoài 10–100 |
 | `storage.js` | `initDB()` | Mở/tạo DB `HealthyAppLocalDB`, xin quyền lưu trữ bền vững |
 | | `saveRecord(record)` | Thêm 1 bản ghi |
 | | `getAllRecords()` | Lấy toàn bộ bản ghi |
 | | `exportDataToJSON()` | Tải file `suckhoe_backup_YYYY-MM-DD.json` |
 | | `importDataFromJSON(file)` | Đọc file JSON và ghi vào DB |
+
+### Định dạng `foods.json`
+
+```json
+{
+  "id": "pho_bo",
+  "name": "Phở bò",
+  "group": "tinh_bot",              // tinh_bot | dam | rau_qua | bo_sung
+  "role": "main",                   // main (món chính trọn bữa) | side
+  "portion": "1 bát (500 ml)",
+  "kcal": 430,
+  "meals": ["breakfast", "lunch"]   // bữa nào được phép gợi ý
+}
+```
+
+Thêm món mới = thêm 1 object vào mảng `foods` (giữ `id` duy nhất). Năng lượng tham khảo
+Bảng thành phần dinh dưỡng thực phẩm Việt Nam (Viện Dinh dưỡng) và nhãn dinh dưỡng phổ thông,
+đã làm tròn — **chỉ dùng cho mục đích học tập, không dùng để chỉ định điều trị**.
 
 ---
 
@@ -135,13 +197,19 @@ npx serve .
 ## 6. Kiểm thử
 
 ```bash
+python -m unittest discover -s tests -v
+# hoặc chạy từng file:
 python tests/test_nutrition_reference.py -v
+python tests/test_food_data.py -v
 ```
 
-Kết quả mong đợi: `Ran 3 tests ... OK`.
+Kết quả mong đợi: `Ran 8 tests ... OK`.
 
-Bộ test đối chiếu 3 "case vàng" — nếu sửa công thức trong `nutritionEngine.js` mà làm lệch một
-trong các giá trị dưới đây thì test sẽ báo lỗi:
+- `test_nutrition_reference.py` đối chiếu **3 case vàng** BMI/BMR/TDEE — nếu sửa công thức trong
+  `nutritionEngine.js` mà làm lệch một trong các giá trị bên dưới thì test sẽ báo lỗi.
+- `test_food_data.py` kiểm tra `foods.json` (schema, `id` không trùng, ≥ 30 món, mỗi bữa đủ nhóm
+  tinh bột / đạm / rau quả), tỷ lệ chia bữa 30/40/30 và việc luôn ghép được khẩu phần nằm trong
+  ngân sách calo của từng bữa.
 
 | Case | Ghi chú | BMI | BMR | TDEE | Calo mục tiêu |
 | --- | --- | --- | --- | --- | --- |
@@ -156,11 +224,11 @@ trong các giá trị dưới đây thì test sẽ báo lỗi:
 Service Worker trong dự án **cố tình không dùng** `self.skipWaiting()` / sự kiện `activate`
 (giữ đúng kiến trúc tối giản của tài liệu). Hệ quả:
 
-> **Mỗi lần sửa `index.html`, `nutritionEngine.js`, `storage.js`, `manifest.json`
-> hoặc thay icon → BẮT BUỘC tăng `CACHE_NAME` trong `sw.js`.**
+> **Mỗi lần sửa `index.html`, `nutritionEngine.js`, `recommendations.js`, `storage.js`,
+> `foods.json`, `manifest.json` hoặc thay icon → BẮT BUỘC tăng `CACHE_NAME` trong `sw.js`.**
 >
 > ```js
-> const CACHE_NAME = "health-pwa-v2";   // đổi thành "health-pwa-v3", "health-pwa-v4", ...
+> const CACHE_NAME = "health-pwa-v3";   // đổi thành "health-pwa-v4", "health-pwa-v5", ...
 > ```
 
 Nếu quên bước này, người đã cài app sẽ **tiếp tục chạy bản code cũ** (vì `fetch` trả cache trước).
@@ -173,7 +241,7 @@ Quy trình chuẩn:
 # 1. Sửa code
 # 2. Tăng CACHE_NAME trong sw.js
 # 3. Chạy test
-python tests/test_nutrition_reference.py -v
+python -m unittest discover -s tests -v
 # 4. Commit & deploy
 git add -A
 git commit -m "feat: ..."
@@ -225,6 +293,11 @@ Repo đã bật GitHub Pages, nguồn là nhánh `main`:
 
 Ứng dụng không thay thế chẩn đoán hay chỉ định của bác sĩ, và chủ động không thu thập thông tin
 bệnh lý để tránh tư vấn y khoa ngoài phạm vi an toàn.
+
+Gợi ý khẩu phần chỉ là **ví dụ minh hoạ** dựa trên 35 món Việt phổ thông trong `foods.json`
+(năng lượng làm tròn, không tính đến dị ứng, bệnh nền, tôn giáo hay điều kiện kinh tế).
+Khuyến cáo vận động trích theo WHO 2020 và cần được điều chỉnh bởi giáo viên thể chất /
+nhân viên y tế nhà trường khi áp dụng thực tế.
 
 
 

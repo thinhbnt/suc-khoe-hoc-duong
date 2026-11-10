@@ -65,3 +65,29 @@ export function calculateMetrics({ weight, height, age, gender, activityLevel, g
     calculatedAt: new Date().toISOString()
   };
 }
+
+// Tỷ lệ phân bổ calo theo bữa: Sáng 30% - Trưa 40% - Tối 30%
+export const MEAL_SPLIT = {
+  breakfast: 0.3,
+  lunch: 0.4,
+  dinner: 0.3
+};
+
+export const MEAL_LABELS = {
+  breakfast: "Bữa sáng",
+  lunch: "Bữa trưa",
+  dinner: "Bữa tối"
+};
+
+// Chia calo mục tiêu cho 3 bữa theo tỷ lệ 30/40/30.
+// Bữa tối nhận phần còn lại để tổng 3 bữa luôn bằng đúng calo mục tiêu
+// (tránh lệch 1-2 kcal do làm tròn từng bữa).
+export function splitMeals(targetCalories) {
+  const breakfast = Math.round(targetCalories * MEAL_SPLIT.breakfast);
+  const lunch = Math.round(targetCalories * MEAL_SPLIT.lunch);
+  return {
+    breakfast,
+    lunch,
+    dinner: targetCalories - breakfast - lunch
+  };
+}
