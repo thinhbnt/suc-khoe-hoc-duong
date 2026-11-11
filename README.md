@@ -26,6 +26,7 @@ Toàn bộ thuật toán chạy **100% trên máy người dùng** (client-side)
 | Khuyến cáo vận động | Theo nhóm tuổi (dưới 18 / 18–64 / từ 65), tham khảo WHO 2020 |
 | Sao lưu / Phục hồi | Xuất toàn bộ dữ liệu ra file `.json` và nhập lại từ file |
 | Chạy offline | Service Worker cache tĩnh; cài được lên màn hình chính (chế độ `standalone`) |
+| Tự cập nhật | Service Worker `skipWaiting` + `clients.claim` (bản mới kích hoạt ngay, không phải mở app 2 lần); app **hỏi** bằng banner *“Đã có bản mới — Cập nhật ngay / Để sau”*, tự kiểm tra khi mở app, khi quay lại tab và mỗi 15 phút, kèm nút **Kiểm tra cập nhật** ở footer |
 | Thân thiện | Tự chuyển giao diện tối theo cài đặt máy; lỗi nhập liệu hiện ngay trong form thay vì `alert()`; `aria-live` / `role` cho trình đọc màn hình |
 | Phiên bản | Footer hiển thị **số phiên bản + ngày build + tên bộ nhớ đệm đang chạy**, giúp biết ngay máy đã nhận bản mới chưa (không cần xoá dữ liệu trang) |
 
@@ -170,7 +171,7 @@ suc-khoe-hoc-duong/
 ├── recommendations.js              # Gợi ý khẩu phần theo ngân sách bữa + tìm món thay thế (không dấu) + khuyến cáo vận động
 ├── foods.json                      # Dữ liệu 35 món Việt (kcal / khẩu phần / nhóm / bữa phù hợp)
 ├── storage.js                      # IndexedDB + xoá bản ghi + Sao lưu / Phục hồi JSON
-├── sw.js                           # Service Worker cache tĩnh (chạy offline)
+├── sw.js                           # Service Worker: cache tĩnh (offline) + tự cập nhật (skipWaiting/activate/claim)
 ├── manifest.json                   # Khai báo PWA (tên, icon, standalone, theme color)
 ├── icon-192.png , icon-512.png     # Icon PWA (bắt buộc để cài lên màn hình chính)
 ├── tests/
@@ -179,6 +180,7 @@ suc-khoe-hoc-duong/
 │   ├── test_bmi_for_age.py         # Test bảng LMS + z-score khớp dữ liệu WHO 2007
 │   ├── test_version_consistency.py # Test phiên bản app ↔ CACHE_NAME của Service Worker ↔ module được cache
 │   ├── test_food_search.py         # Test hợp đồng của ô tìm món: export, nhãn nhóm ↔ foods.json, UI đổi món
+│   ├── test_sw_update.py           # Test cơ chế tự cập nhật: skipWaiting/activate/claim, network-first HTML, banner hỏi người dùng
 │   └── fixtures/
 │       ├── bfawho2007.txt          # Bảng LMS gốc của WHO (nguyên văn, 340 dòng)
 │       └── who2007_zbmi_sample.csv # 12 ca (BMI, tuổi tháng, z) do WHO AnthroPlus tính
@@ -275,10 +277,11 @@ python -m unittest discover -s tests -v
 python tests/test_nutrition_reference.py -v
 python tests/test_food_data.py -v
 python tests/test_food_search.py -v
+python tests/test_sw_update.py -v
 python -m unittest discover -s tests -p "test_bmi_for_age.py" -v
 ```
 
-Kết quả mong đợi: `Ran 24 tests ... OK`.
+Kết quả mong đợi: `Ran 34 tests ... OK`.
 
 - `test_nutrition_reference.py` đối chiếu **3 case vàng** BMI/BMR/TDEE — nếu sửa công thức trong
   `nutritionEngine.js` mà làm lệch một trong các giá trị bên dưới thì test sẽ báo lỗi.
@@ -299,11 +302,20 @@ Kết quả mong đợi: `Ran 24 tests ... OK`.
   `normalizeForSearch` phải thật sự xử lý `đ/Đ` (nếu thiếu, gõ `dau` sẽ không ra *Đậu phụ*);
   `index.html` phải nối ô tìm kiếm vào sự kiện và có dòng `#planTotal` mang `data-total`; mỗi bữa
   phải có ≥ 5 món để ô tìm kiếm có lựa chọn.
+- `test_sw_update.py` chặn lỗi **app không tự cập nhật**: `sw.js` phải `skipWaiting()` khi install,
+  phải có `activate` xoá cache cũ + `clients.claim()`, phải nghe message `SKIP_WAITING`; request
+  điều hướng (trang HTML) phải **network-first** để không kẹt HTML cũ; `index.html` phải có banner
+  `#updateBanner` (mặc định `hidden`), đăng ký `updateViaCache: 'none'`, lắng nghe
+  `updatefound`/`controllerchange`, kiểm tra định kỳ 15 phút và **chỉ** tải lại khi người dùng bấm
+  “Cập nhật ngay”.
 
-Ngoài bộ test Python còn có **E2E headless Chrome** (119 check, không nằm trong repo vì cần tải
+Ngoài bộ test Python còn có **E2E headless Chrome** (131 check, không nằm trong repo vì cần tải
 Chrome): chạy thật luồng đổi món — mở ô tìm kiếm, gõ `BANH` (hoa, không dấu), gõ `com` để thấy
 việc lọc theo bữa, gõ `dau` để kiểm tra chữ `đ`, gõ `bo sung` để thấy khớp tên nhóm, chọn món rồi so
-**calo bữa và tổng 3 bữa tự cộng lại**.
+**calo bữa và tổng 3 bữa tự cộng lại**; kiểm tra banner cập nhật, nút **Kiểm tra cập nhật** và
+`sw.js` có `skipWaiting` / `activate` / network-first. Luồng nâng cấp thật được kiểm tra riêng bằng
+cách chạy bản v7 → sửa `sw.js` thành v8 → tải lại trang: banner **tự hiện**, cache v7 bị xoá, chỉ
+còn `health-pwa-v8` và không còn Service Worker nào ở trạng thái `waiting`.
 
 | Case | Ghi chú | BMI | BMR | TDEE | Calo mục tiêu |
 | --- | --- | --- | --- | --- | --- |
@@ -315,26 +327,43 @@ việc lọc theo bữa, gõ `dau` để kiểm tra chữ `đ`, gõ `bo sung` đ
 
 ## 7. ⚠️ Quy trình cập nhật code (bắt buộc)
 
-Service Worker trong dự án **cố tình không dùng** `self.skipWaiting()` / sự kiện `activate`
-(giữ đúng kiến trúc tối giản của tài liệu). Hệ quả:
+Từ **v1.4.0**, Service Worker chạy đúng luồng cập nhật của PWA (trước đây không có nên app đã cài
+cứ mãi chạy bản cũ):
+
+| Sự kiện | Việc xảy ra |
+| --- | --- |
+| `install` | tải toàn bộ `ASSETS` vào cache mới rồi gọi **`self.skipWaiting()`** → bản mới không phải chờ người dùng đóng tab |
+| `activate` | xoá mọi cache `health-pwa-*` khác `CACHE_NAME`, gọi **`clients.claim()`**, gửi message `SW_ACTIVATED` cho các tab đang mở |
+| `fetch` (trang HTML) | **network-first**: thử mạng trước để luôn thấy bản mới, chỉ khi mất mạng mới dùng cache → không còn cảnh “kẹt” HTML cũ |
+| `fetch` (js / json / ảnh) | cache-first như trước, nên vẫn chạy offline bình thường |
+
+Phía trang (`index.html`): đăng ký `register('./sw.js', { updateViaCache: 'none' })` (để chính file
+`sw.js` không bị HTTP cache giữ 10 phút), lắng nghe `updatefound` / `controllerchange`, tự gọi
+`registration.update()` khi mở app, khi quay lại tab và mỗi **15 phút**. Khi có bản mới, app **hỏi**
+bằng banner *“Đã có bản mới — **Cập nhật ngay** / Để sau”*; chỉ tải lại khi người dùng bấm (không tự
+reload để khỏi mất dữ liệu đang nhập). Footer có thêm nút **Kiểm tra cập nhật** để hỏi ngay.
 
 > **Mỗi lần sửa `index.html`, `nutritionEngine.js`, `bmiForAge.js`, `recommendations.js`,
 > `storage.js`, `foods.json`, `manifest.json` hoặc thay icon → BẮT BUỘC tăng số phiên bản ở
 > 3 chỗ đồng bộ.**
 >
 > ```js
-> const CACHE_NAME     = "health-pwa-v6";      // sw.js      → "health-pwa-v7", "health-pwa-v8", ...
-> const EXPECTED_CACHE = 'health-pwa-v6';      // index.html → phải trùng CACHE_NAME ở trên
-> <meta name="app-version" content="1.3.0">    // index.html → 1.3.1 / 1.4.0 / 2.0.0 (semver)
+> const CACHE_NAME     = "health-pwa-v7";      // sw.js      → "health-pwa-v8", "health-pwa-v9", ...
+> const EXPECTED_CACHE = 'health-pwa-v7';      // index.html → phải trùng CACHE_NAME ở trên
+> <meta name="app-version" content="1.4.0">    // index.html → 1.4.1 / 1.5.0 / 2.0.0 (semver)
 > <meta name="app-build"   content="2026-11-10"><!-- index.html → ngày phát hành -->
 > ```
 >
 > `python -m unittest discover -s tests` sẽ **báo lỗi ngay** nếu hai tên cache lệch nhau —
 > đây là lưới an toàn cho quy tắc này.
 
-Nếu quên bước này, người đã cài app sẽ **tiếp tục chạy bản code cũ** (vì `fetch` trả cache trước).
-Sau khi tăng `CACHE_NAME` và deploy, người dùng cần mở app **2 lần** (lần 1 tải Service Worker
-mới, lần 2 chạy code mới) hoặc xoá dữ liệu trang trong trình duyệt.
+Lý do vẫn phải tăng `CACHE_NAME`: `activate` chỉ xoá cache **khác tên**; nếu giữ nguyên tên, hai
+phiên bản dùng chung một cache, file cũ có thể còn sót và footer không phân biệt được máy đang chạy
+bản nào. Sau khi deploy, người dùng **không phải làm gì**: mở app (hoặc quay lại tab) là app tự phát
+hiện bản mới và hiện banner cập nhật.
+
+> Máy còn đang chạy bản **≤ 1.3.0** (bản chưa có cơ chế này) sẽ chỉ nhận v1.4.0 sau **một lần tải
+> lại trang**; từ v1.4.0 trở đi mọi bản sau đều tự động.
 
 Quy trình chuẩn:
 
@@ -350,23 +379,28 @@ git commit -m "feat: ..."
 git push origin main        # GitHub Pages tự build lại trong ~1 phút
 ```
 
-### 7.1. Hiển thị phiên bản trong app
+### 7.1. Hiển thị phiên bản & nhắc cập nhật trong app
 
-Cuối trang có một dòng footer:
+Cuối trang có footer:
 
-> Phiên bản **v1.3.0** (2026-11-10)
-> Bộ nhớ đệm health-pwa-v6 — đã là bản mới nhất
+> Phiên bản **v1.4.0** (2026-11-10)
+> Bộ nhớ đệm **health-pwa-v7 — đã là bản mới nhất**
+> *Kiểm tra cập nhật* (nút) + dòng phản hồi nhỏ bên cạnh
 
 - Số phiên bản đọc từ `<meta name="app-version">` ⇒ chỉ cần sửa **một chỗ** trong `index.html`;
   `meta[name="app-build"]` là ngày phát hành.
 - Dòng thứ hai đọc **tên cache thật** bằng `caches.keys()` rồi so với `EXPECTED_CACHE`:
   - trùng nhau → *"đã là bản mới nhất"* (kèm danh sách cache cũ nếu còn sót lại);
-  - máy còn cache **cũ hơn** (chưa nhận bản mới) → chữ chuyển **màu cảnh báo**:
-    *"bản health-pwa-vN sẽ kích hoạt ở lần mở kế tiếp"* — đúng hành vi của Service Worker
-    không dùng `skipWaiting` ở mục trên;
+  - máy còn cache **cũ hơn** → chữ chuyển **màu cảnh báo**: *"bản health-pwa-vN đã cài, bấm Cập
+    nhật ngay"* (chỉ xuất hiện trong khoảng rất ngắn trước khi `activate` dọn cache cũ);
   - lần mở đầu tiên (chưa có cache) → *"mở lại ứng dụng một lần để bật chế độ ngoại tuyến"*.
-- Nhờ vậy không phải đoán "app đã cập nhật chưa?": mở app là thấy ngay, và sau khi deploy chỉ cần
-  mở link kiểm tra footer thay vì xoá dữ liệu trang.
+- Nút **Kiểm tra cập nhật** gọi `registration.update()` và báo lại ngay:
+  *"Đã kiểm tra HH:MM — đang dùng bản v1.4.0 mới nhất."* (hoặc *"Có bản mới đang chờ"* / *"Không
+  kiểm tra được (đang ngoại tuyến?)"*).
+- Banner cập nhật (thanh xanh ở đáy màn hình) chỉ hiện khi thật sự có bản mới: **Cập nhật ngay** →
+  tải lại và chạy bản mới; **Để sau** → ẩn banner, bản mới áp dụng ở lần tải lại kế tiếp.
+- Nhờ vậy không phải đoán "app đã cập nhật chưa?": mở app là thấy ngay, và bản mới được nhắc một
+  cách rõ ràng thay vì âm thầm nằm trong cache.
 
 ---
 
