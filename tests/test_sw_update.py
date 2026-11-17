@@ -148,5 +148,89 @@ class TestUpdateUi(unittest.TestCase):
         )
 
 
+    def test_banner_sits_at_top_of_page(self):
+        head, _, _ = self.html.partition('<script type="module">')
+        banner_at = head.find('id="updateBanner"')
+        first_card = head.find('<div class="card">')
+        body_at = head.find('<body>')
+        self.assertGreater(banner_at, -1, "Thiếu #updateBanner")
+        self.assertGreater(first_card, -1, "Không tìm thấy card nội dung đầu tiên")
+        self.assertLess(
+            body_at,
+            banner_at,
+            "Thanh cập nhật phải nằm trong <body>, ngay đầu trang.",
+        )
+        self.assertLess(
+            banner_at,
+            first_card,
+            "Thanh cập nhật phải đứng TRƯỚC nội dung (đầu trang), không phải ở cuối trang.",
+        )
+
+    def test_banner_css_is_in_flow_and_sticky_at_top(self):
+        rule = re.search(r"\.update-banner\s*\{([^}]*)\}", self.html)
+        self.assertIsNotNone(rule, "Thiếu CSS .update-banner")
+        css = rule.group(1)
+        self.assertIn("position: sticky", css, "Thanh cập nhật phải nằm trong luồng trang (sticky) ở đầu trang.")
+        self.assertIn("top: 0", css, "Thanh cập nhật phải dính mép trên khi người dùng cuộn xuống.")
+        self.assertNotIn("position: fixed", css, "Không dùng fixed nữa — fixed che mất nội dung đầu trang.")
+        self.assertNotIn("bottom:", css, "Thanh cập nhật không còn nằm ở đáy màn hình.")
+        self.assertIn("max-width: 480px", css, "Bề rộng phải khớp .card/.app-footer (480px) để không lệch layout.")
+        self.assertIn("[hidden]", self.html, "Phải giữ .update-banner[hidden] { display: none } để ẩn hoàn toàn.")
+
+    def test_banner_is_polite_live_region(self):
+        tag = re.search(r'<div id="updateBanner"[^>]*>', self.html)
+        self.assertIsNotNone(tag, "Thiếu thẻ #updateBanner")
+        attrs = tag.group(0)
+        self.assertIn('aria-live="polite"', attrs, "Dùng aria-live=polite để không cắt ngang câu trình đọc màn hình đang đọc.")
+        self.assertIn('role="status"', attrs, "Vùng thông báo nên dùng role=status.")
+
+    def test_later_dismiss_remembered_for_session(self):
+        self.assertIn("sessionStorage", self.html, "Phải ghi nhớ lựa chọn bằng sessionStorage.")
+        self.assertIn("UPDATE_LATER_KEY", self.html, "Thiếu hằng khoá ghi nhớ 'Để sau'.")
+        self.assertRegex(
+            self.html,
+            r"storageSet\(UPDATE_LATER_KEY, '1'\)",
+            'Nút "Để sau" phải ghi nhớ để thanh không bật lại sau mỗi 15 phút.',
+        )
+        self.assertRegex(
+            self.html,
+            r"storageGet\(UPDATE_LATER_KEY\) === '1'",
+            "showUpdateBanner phải bỏ qua khi người dùng đã chọn Để sau trong phiên này.",
+        )
+        self.assertRegex(
+            self.html,
+            r"storageRemove\(UPDATE_LATER_KEY\)",
+            'Nút "Kiểm tra cập nhật" phải xoá ghi nhớ để thanh hiện lại nếu có bản mới.',
+        )
+
+    def test_app_badge_when_supported(self):
+        self.assertIn("navigator.setAppBadge", self.html, "Nên bật chấm đỏ trên icon app đã cài khi có bản mới.")
+        self.assertIn("navigator.clearAppBadge", self.html, "Phải tắt chấm đỏ sau khi cập nhật xong.")
+        self.assertRegex(
+            self.html,
+            r"typeof fn !== 'function'",
+            "Badging API không có ở mọi trình duyệt (Safari/Firefox) → phải kiểm tra tồn tại trước khi gọi.",
+        )
+
+    def test_reload_fallback_when_update_hangs(self):
+        self.assertRegex(
+            self.html,
+            r"RELOAD_FALLBACK_MS\s*=\s*8000",
+            "Cần hẹn giờ dự phòng (8 giây) khi bấm Cập nhật ngay mà không tải lại được.",
+        )
+        self.assertRegex(self.html, r"btnNow\.disabled = true", "Trong lúc cập nhật phải khoá nút để tránh bấm nhiều lần.")
+        self.assertIn("Đang cập nhật…", self.html, 'Phải hiện trạng thái "Đang cập nhật…".')
+        self.assertIn("Tải lại trang", self.html, "Hết thời gian chờ phải có nút dự phòng để người dùng không bị kẹt.")
+
+    def test_confirms_right_after_updating(self):
+        self.assertIn("UPDATED_FROM_KEY", self.html, "Phải ghi lại phiên bản trước khi tải lại.")
+        self.assertRegex(
+            self.html,
+            r"Đã cập nhật lên v\$\{APP_VERSION\}",
+            'Sau khi tải lại phải báo "Đã cập nhật lên v…" để người dùng biết đã xong.',
+        )
+        self.assertIn("showUpdatedToast();", self.html, "Phải gọi showUpdatedToast() khi trang khởi động.")
+
+
 if __name__ == "__main__":
     unittest.main()

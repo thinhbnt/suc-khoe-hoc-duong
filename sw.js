@@ -13,7 +13,7 @@
 // LUỒNG CẬP NHẬT (từ v1.4.0): install xong → self.skipWaiting() → "activate" xoá
 // cache cũ + clients.claim() → tab đang mở nhận "controllerchange" và hiện banner
 // "Cập nhật ngay" (xem khối "Service Worker + tự động cập nhật" trong index.html).
-const CACHE_NAME = "health-pwa-v7";
+const CACHE_NAME = "health-pwa-v8";
 const ASSETS = [
   "./",
   "./index.html",

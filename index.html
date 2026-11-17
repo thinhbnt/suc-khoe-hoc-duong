@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Khuyến Nghị Dinh Dưỡng</title>
   <!-- Nguồn duy nhất của số phiên bản: đổi ở đây, script đọc lại qua meta[name="app-version"] -->
-  <meta name="app-version" content="1.4.0">
+  <meta name="app-version" content="1.5.0">
   <meta name="app-build" content="2026-11-10">
   <link rel="manifest" href="manifest.json">
   <style>
@@ -85,18 +85,34 @@
     .app-footer .link-btn { margin-top: 2px; }
     .link-btn { width: auto; background: none; border: 0; padding: 0; margin: 0; color: #2563eb; font-size: 12px; font-weight: 400; text-decoration: underline; cursor: pointer; }
     #swCheck { display: block; font-size: 11px; color: var(--muted); }
-    .update-banner { position: fixed; left: 12px; right: 12px; bottom: 12px; max-width: 456px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; background: #1d4ed8; color: #ffffff; padding: 10px 12px; border-radius: 8px; font-size: 13px; line-height: 1.4; box-shadow: 0 6px 20px rgba(0,0,0,0.25); z-index: 50; }
+    /* Thanh "Có bản mới": nằm trong luồng trang Ở ĐẦU trang (đẩy nội dung xuống, không che
+       phần nào) và dính trên cùng khi cuộn, để đọc tới cuối trang vẫn thấy. Mặc định ẩn —
+       chỉ hiện khi thật sự có bản mới. */
+    .update-banner { position: sticky; top: 0; max-width: 480px; margin: 0 auto 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; background: #1d4ed8; color: #ffffff; padding: 10px 12px; border-radius: 8px; font-size: 13px; line-height: 1.4; box-shadow: 0 4px 14px rgba(15,23,42,0.25); z-index: 50; }
     .update-banner[hidden] { display: none; }
+    .update-banner.is-busy { background: #1e40af; }
+    .update-banner.is-done { background: #047857; }
     .update-banner span { flex: 1 1 160px; }
     .update-banner button { width: auto; margin: 0; padding: 6px 10px; font-size: 12px; border-radius: 6px; }
+    .update-banner button[hidden] { display: none; }
+    .update-banner button[disabled] { opacity: 0.75; cursor: default; }
     .update-banner .btn-update { background: #ffffff; color: #1d4ed8; font-weight: 700; }
     .update-banner .btn-later { background: transparent; border: 1px solid rgba(255,255,255,0.6); color: #ffffff; }
     @media (max-width: 360px) { .update-banner button { flex: 1 1 100%; } }
+    @media (prefers-color-scheme: dark) { .update-banner { background: #1e40af; } .update-banner.is-done { background: #065f46; } }
     @media (prefers-color-scheme: dark) { .app-footer .is-stale { color: #fbbf24; } .link-btn { color: #93c5fd; } }
     @media (max-width: 360px) { .history-item { flex-direction: column; } .btn-del { width: 100%; } }
   </style>
 </head>
 <body>
+
+  <!-- Thanh "Có bản mới": nằm ngay ĐẦU trang, mặc định ẩn — chỉ hiện khi thật sự có bản mới.
+       role="status" + aria-live="polite" để trình đọc màn hình đọc xong câu đang đọc mới báo. -->
+  <div id="updateBanner" class="update-banner" role="status" aria-live="polite" aria-atomic="true" hidden>
+    <span id="updateBannerText">Đã có bản mới của ứng dụng.</span>
+    <button type="button" id="btnUpdateNow" class="btn-update">Cập nhật ngay</button>
+    <button type="button" id="btnUpdateLater" class="btn-later">Để sau</button>
+  </div>
 
   <div class="card">
     <h2>Thông Số Thể Trạng</h2>
@@ -200,13 +216,6 @@
     </div>
   </footer>
 
-  <!-- Banner hỏi người dùng khi có bản mới (ẩn cho tới khi cần) -->
-  <div id="updateBanner" class="update-banner" role="alert" hidden>
-    <span id="updateBannerText">Đã có bản mới của ứng dụng.</span>
-    <button type="button" id="btnUpdateNow" class="btn-update">Cập nhật ngay</button>
-    <button type="button" id="btnUpdateLater" class="btn-later">Để sau</button>
-  </div>
-
   <script type="module">
     import { calculateMetrics, splitMeals, MEAL_LABELS } from './nutritionEngine.js';
     import { saveRecord, getAllRecords, deleteRecord, clearAllRecords, exportDataToJSON, importDataFromJSON } from './storage.js';
@@ -222,19 +231,24 @@
     const APP_VERSION = metaContent('app-version') || '0.0.0';
     const APP_BUILD = metaContent('app-build');
     // PHẢI trùng CACHE_NAME trong sw.js (tests/test_version_consistency.py kiểm tra).
-    const EXPECTED_CACHE = 'health-pwa-v7';
+    const EXPECTED_CACHE = 'health-pwa-v8';
 
     // ---------- Service Worker + tự động cập nhật ----------
     // sw.js cài xong là tự skipWaiting() + clients.claim() nên bản mới được kích hoạt
-    // ngay. Phần dưới đây lo ba việc còn lại: HỎI người dùng khi có bản mới (banner),
-    // TỰ kiểm tra định kỳ (mở app / quay lại tab / mỗi 15 phút) và cho phép kiểm tra
-    // tay ở footer. Không bao giờ tự tải lại khi người dùng chưa bấm, để không mất
+    // ngay. Phần dưới đây lo phần còn lại: HỎI người dùng khi có bản mới (thanh ở ĐẦU
+    // trang), TỰ kiểm tra định kỳ (mở app / quay lại tab / mỗi 15 phút) và cho phép kiểm
+    // tra tay ở footer. Không bao giờ tự tải lại khi người dùng chưa bấm, để không mất
     // dữ liệu đang nhập trong form.
     const SW_CHECK_INTERVAL = 15 * 60 * 1000;
+    const RELOAD_FALLBACK_MS = 8000;     // bấm "Cập nhật ngay" mà 8s chưa xong → cho nút dự phòng
+    const UPDATE_LATER_KEY = 'swUpdateLater';   // "Để sau": chỉ ẩn thanh trong phiên này
+    const UPDATED_FROM_KEY = 'swUpdatedFrom';   // phiên bản trước khi bấm, để báo "Đã cập nhật lên…"
     let swReg = null;
     let hadController = false;      // trang mở ra đã có SW quản lý chưa (lần đầu thì chưa)
     let userAcceptedUpdate = false; // người dùng đã bấm "Cập nhật ngay"
     let reloading = false;
+    let updateReady = false;        // bản mới đã kích hoạt nhưng người dùng chưa tải lại
+    let reloadFallbackTimer = null;
 
     function timeNow() {
       const d = new Date();
@@ -246,17 +260,87 @@
       if (el) el.textContent = text || '';
     }
 
-    // kind = 'waiting' (có bản mới đang chờ) | 'ready' (bản mới đã kích hoạt)
+    // sessionStorage có thể bị chặn (chế độ riêng tư) → mọi truy cập đều phải bọc try/catch.
+    function storageGet(key) {
+      try {
+        return sessionStorage.getItem(key);
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function storageSet(key, value) {
+      try {
+        sessionStorage.setItem(key, value);
+      } catch (err) { /* chế độ riêng tư: bỏ qua, chỉ mất phần ghi nhớ */ }
+    }
+
+    function storageRemove(key) {
+      try {
+        sessionStorage.removeItem(key);
+      } catch (err) { /* chế độ riêng tư: bỏ qua */ }
+    }
+
+    // Chấm đỏ trên icon app đã cài (Badging API — Chrome/Edge/Android). Không hỗ trợ thì thôi.
+    function setBadge(on) {
+      try {
+        const fn = on ? navigator.setAppBadge : navigator.clearAppBadge;
+        if (typeof fn !== 'function') return;
+        const result = fn.call(navigator, on ? 1 : undefined);
+        if (result && typeof result.catch === 'function') result.catch(() => {});
+      } catch (err) { /* trình duyệt không hỗ trợ Badging API */ }
+    }
+
+    // kind = 'waiting' (bản mới đang chờ) | 'ready' (bản mới đã kích hoạt)
+    //      | 'done'    (vừa cập nhật xong → thanh xanh lá tự tắt sau 6 giây)
     function showUpdateBanner(kind) {
       const banner = document.getElementById('updateBanner');
       const text = document.getElementById('updateBannerText');
+      const btnNow = document.getElementById('btnUpdateNow');
+      const btnLater = document.getElementById('btnUpdateLater');
       if (!banner) return;
+
+      if (kind === 'done') {
+        if (text) text.textContent = `Đã cập nhật lên v${APP_VERSION}.`;
+        banner.classList.remove('is-busy');
+        banner.classList.add('is-done');
+        if (btnNow) btnNow.hidden = true;
+        if (btnLater) btnLater.hidden = true;
+        banner.hidden = false;
+        updateReady = false;
+        setBadge(false);
+        setTimeout(hideUpdateBanner, 6000);
+        return;
+      }
+
+      // Người dùng đã bấm "Để sau" trong phiên này → không bật lại thanh mỗi 15 phút,
+      // nhưng vẫn giữ chấm đỏ trên icon và nhắc trong footer.
+      if (storageGet(UPDATE_LATER_KEY) === '1') {
+        updateReady = kind === 'ready';
+        setBadge(true);
+        setSwCheck('Đã có bản mới — tải lại trang khi bạn muốn.');
+        return;
+      }
+
       if (text) {
         text.textContent = kind === 'ready'
           ? `Bản mới đã cài (bạn đang chạy v${APP_VERSION}) — tải lại để dùng.`
           : `Đã có bản mới (bạn đang dùng v${APP_VERSION}).`;
       }
+      banner.classList.remove('is-busy', 'is-done');
+      if (btnNow) {
+        btnNow.hidden = false;
+        btnNow.disabled = false;
+        btnNow.textContent = 'Cập nhật ngay';
+        btnNow.onclick = activateUpdate;
+      }
+      if (btnLater) {
+        btnLater.hidden = false;
+        btnLater.disabled = false;
+      }
       banner.hidden = false;
+      updateReady = kind === 'ready';
+      setBadge(true);
       setSwCheck(kind === 'ready'
         ? 'Bản mới đã sẵn sàng — bấm “Cập nhật ngay”.'
         : 'Có bản mới đang chờ — bấm “Cập nhật ngay”.');
@@ -265,6 +349,15 @@
     function hideUpdateBanner() {
       const banner = document.getElementById('updateBanner');
       if (banner) banner.hidden = true;
+    }
+
+    // Sau khi bấm "Cập nhật ngay", trang tải lại → báo một câu ngắn cho biết đã xong.
+    function showUpdatedToast() {
+      const from = storageGet(UPDATED_FROM_KEY);
+      storageRemove(UPDATED_FROM_KEY);
+      if (!from || from === APP_VERSION) return;
+      storageRemove(UPDATE_LATER_KEY);
+      showUpdateBanner('done');
     }
 
     // Kiểm tra bản mới. manual = người dùng bấm nút nên cần phản hồi rõ ràng.
@@ -288,17 +381,54 @@
         showUpdateBanner('waiting');
         return true;
       }
+      // Không còn bản nào chờ → tắt chấm đỏ (trừ khi bản mới đã activate mà chưa tải lại).
+      if (!updateReady) setBadge(false);
       setSwCheck(manual ? `Đã kiểm tra ${timeNow()} — đang dùng bản v${APP_VERSION} mới nhất.` : '');
       return false;
     }
 
+    // Nếu bấm "Cập nhật ngay" mà mãi không tải lại được (SW lỗi/mất mạng), cho nút dự phòng
+    // để người dùng không bị kẹt ở màn hình "Đang cập nhật…".
+    function armReloadFallback() {
+      clearTimeout(reloadFallbackTimer);
+      reloadFallbackTimer = setTimeout(() => {
+        if (reloading) return;
+        const btnNow = document.getElementById('btnUpdateNow');
+        const btnLater = document.getElementById('btnUpdateLater');
+        if (btnNow) {
+          btnNow.hidden = false;
+          btnNow.disabled = false;
+          btnNow.textContent = 'Tải lại trang';
+          btnNow.onclick = () => {
+            if (!reloading) {
+              reloading = true;
+              location.reload();
+            }
+          };
+        }
+        if (btnLater) btnLater.disabled = false;
+        setSwCheck('Cập nhật hơi lâu — bấm “Tải lại trang” nếu cần.');
+      }, RELOAD_FALLBACK_MS);
+    }
+
     function activateUpdate() {
       const waiting = swReg && swReg.waiting;
+      const banner = document.getElementById('updateBanner');
       const text = document.getElementById('updateBannerText');
+      const btnNow = document.getElementById('btnUpdateNow');
+      const btnLater = document.getElementById('btnUpdateLater');
       userAcceptedUpdate = true;
+      storageSet(UPDATED_FROM_KEY, APP_VERSION); // để lần tải lại báo "Đã cập nhật lên v…"
+      if (banner) banner.classList.add('is-busy');
+      if (btnNow) {
+        btnNow.disabled = true;
+        btnNow.textContent = 'Đang cập nhật…';
+      }
+      if (btnLater) btnLater.disabled = true;
+      if (text) text.textContent = 'Đang cập nhật…';
+      armReloadFallback();
       if (waiting) {
         // SW nhận message này sẽ skipWaiting() → activate → controllerchange → tải lại.
-        if (text) text.textContent = 'Đang cập nhật…';
         waiting.postMessage({ type: 'SKIP_WAITING' });
         return;
       }
@@ -311,13 +441,18 @@
 
     document.getElementById('btnUpdateNow').onclick = activateUpdate;
     document.getElementById('btnUpdateLater').onclick = () => {
+      storageSet(UPDATE_LATER_KEY, '1');
       hideUpdateBanner();
-      setSwCheck('Bản mới sẽ được áp dụng khi bạn tải lại trang.');
+      setSwCheck('Đã có bản mới — sẽ áp dụng khi bạn tải lại trang.');
     };
     document.getElementById('btnCheckUpdate').onclick = () => {
+      // Người dùng chủ động hỏi → bỏ ghi nhớ "Để sau" để thanh cập nhật hiện lại nếu có bản mới.
+      storageRemove(UPDATE_LATER_KEY);
       setSwCheck('Đang kiểm tra…');
       checkForUpdate(true);
     };
+
+    showUpdatedToast();
 
     if ('serviceWorker' in navigator) {
       hadController = !!navigator.serviceWorker.controller;
